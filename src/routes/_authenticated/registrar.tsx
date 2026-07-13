@@ -229,7 +229,7 @@ function RegistrarPage() {
               id: newRecordId,
               elder_id: elderId,
               caregiver_id: userId || "0e7874c3-a937-4158-a0ab-949991be81b9",
-              record_type: rec.record_type,
+              record_type: rec.record_type as "alimentacao" | "diurese" | "medicacao" | "ocorrencia" | "passagem_plantao" | "sinais_vitais",
               data: rec.data,
               notes: rec.notes || null,
               selfie_path: path,
