@@ -661,6 +661,16 @@ function CaregiverDashboard({ userId }: { userId: string }) {
     },
   });
 
+  const { data: myHandovers } = useQuery({
+    queryKey: ["my-handovers", userId],
+    queryFn: async () => {
+      const all = await fetchAllHandovers();
+      return all.filter((h: any) => h.caregiver_id === userId);
+    },
+  });
+
+
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
