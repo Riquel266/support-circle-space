@@ -1,8 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { HeartHandshake, LayoutDashboard, Users, ClipboardPlus, UserCog, LogOut } from "lucide-react";
+import { HeartHandshake, LayoutDashboard, Users, ClipboardPlus, UserCog, LogOut, CalendarCheck } from "lucide-react";
 import type { ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useRole } from "@/hooks/use-role";
 
@@ -14,22 +13,27 @@ export function AppShell({ children }: { children: ReactNode }) {
   const handleSignOut = async () => {
     await queryClient.cancelQueries();
     queryClient.clear();
-    await supabase.auth.signOut();
+    localStorage.removeItem("cuidarbem_user");
     navigate({ to: "/auth", replace: true });
   };
 
   const navItems = [
-    { to: "/painel", label: "Painel", icon: LayoutDashboard },
-    { to: "/idosos", label: "Idosos", icon: Users },
-    ...(role === "cuidador" ? [{ to: "/registrar", label: "Registrar", icon: ClipboardPlus }] : []),
-    ...(role === "supervisor" ? [{ to: "/equipe", label: "Equipe", icon: UserCog }] : []),
+    ...(role === "supervisor" ? [
+      { to: "/painel", label: "Painel", icon: LayoutDashboard },
+      { to: "/idosos", label: "Idosos", icon: Users },
+      { to: "/equipe", label: "Equipe", icon: UserCog },
+      { to: "/presenca", label: "Presença", icon: CalendarCheck },
+    ] : []),
+    ...(role === "cuidador" ? [
+      { to: "/idosos", label: "Idosos", icon: Users },
+    ] : []),
   ];
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-40 border-b bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <Link to="/painel" className="flex items-center gap-2 font-bold text-primary">
+          <Link to={role === "supervisor" ? "/painel" : "/idosos"} className="flex items-center gap-2 font-bold text-primary">
             <HeartHandshake className="h-6 w-6" />
             <span className="font-display text-lg">CuidarBem</span>
           </Link>

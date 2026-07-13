@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRegistrarRouteImport } from './routes/_authenticated/registrar'
+import { Route as AuthenticatedPresencaRouteImport } from './routes/_authenticated/presenca'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedEquipeRouteImport } from './routes/_authenticated/equipe'
 import { Route as AuthenticatedIdososIndexRouteImport } from './routes/_authenticated/idosos.index'
@@ -41,6 +42,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedRegistrarRoute = AuthenticatedRegistrarRouteImport.update({
   id: '/registrar',
   path: '/registrar',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPresencaRoute = AuthenticatedPresencaRouteImport.update({
+  id: '/presenca',
+  path: '/presenca',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/equipe': typeof AuthenticatedEquipeRoute
   '/painel': typeof AuthenticatedPainelRoute
+  '/presenca': typeof AuthenticatedPresencaRoute
   '/registrar': typeof AuthenticatedRegistrarRoute
   '/idosos/$elderId': typeof AuthenticatedIdososElderIdRoute
   '/idosos/': typeof AuthenticatedIdososIndexRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/equipe': typeof AuthenticatedEquipeRoute
   '/painel': typeof AuthenticatedPainelRoute
+  '/presenca': typeof AuthenticatedPresencaRoute
   '/registrar': typeof AuthenticatedRegistrarRoute
   '/idosos/$elderId': typeof AuthenticatedIdososElderIdRoute
   '/idosos': typeof AuthenticatedIdososIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/equipe': typeof AuthenticatedEquipeRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
+  '/_authenticated/presenca': typeof AuthenticatedPresencaRoute
   '/_authenticated/registrar': typeof AuthenticatedRegistrarRoute
   '/_authenticated/idosos/$elderId': typeof AuthenticatedIdososElderIdRoute
   '/_authenticated/idosos/': typeof AuthenticatedIdososIndexRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/equipe'
     | '/painel'
+    | '/presenca'
     | '/registrar'
     | '/idosos/$elderId'
     | '/idosos/'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/equipe'
     | '/painel'
+    | '/presenca'
     | '/registrar'
     | '/idosos/$elderId'
     | '/idosos'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/equipe'
     | '/_authenticated/painel'
+    | '/_authenticated/presenca'
     | '/_authenticated/registrar'
     | '/_authenticated/idosos/$elderId'
     | '/_authenticated/idosos/'
@@ -176,6 +188,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRegistrarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/presenca': {
+      id: '/_authenticated/presenca'
+      path: '/presenca'
+      fullPath: '/presenca'
+      preLoaderRoute: typeof AuthenticatedPresencaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/painel': {
       id: '/_authenticated/painel'
       path: '/painel'
@@ -210,6 +229,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedEquipeRoute: typeof AuthenticatedEquipeRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
+  AuthenticatedPresencaRoute: typeof AuthenticatedPresencaRoute
   AuthenticatedRegistrarRoute: typeof AuthenticatedRegistrarRoute
   AuthenticatedIdososElderIdRoute: typeof AuthenticatedIdososElderIdRoute
   AuthenticatedIdososIndexRoute: typeof AuthenticatedIdososIndexRoute
@@ -218,6 +238,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEquipeRoute: AuthenticatedEquipeRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
+  AuthenticatedPresencaRoute: AuthenticatedPresencaRoute,
   AuthenticatedRegistrarRoute: AuthenticatedRegistrarRoute,
   AuthenticatedIdososElderIdRoute: AuthenticatedIdososElderIdRoute,
   AuthenticatedIdososIndexRoute: AuthenticatedIdososIndexRoute,
@@ -235,3 +256,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

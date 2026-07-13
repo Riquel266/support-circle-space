@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { UserPlus, ChevronRight, Camera } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useRole } from "@/hooks/use-role";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -19,82 +18,59 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { calcAge } from "@/lib/care";
+import { generateId } from "@/lib/utils";
+
+const API_URL = () => `http://${window.location.hostname}:3001/api`;
 
 export const Route = createFileRoute("/_authenticated/idosos/")({
   component: IdososPage,
 });
 
 function IdososPage() {
-  const { role, userId } = useRole();
+  const { role } = useRole();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const { data: elders } = useQuery({
-    queryKey: ["elders-list", role, userId],
-    enabled: !!role,
+    queryKey: ["elders-list"],
     queryFn: async () => {
-      let remoteElders: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from("elders")
-          .select("*")
-          .eq("active", true)
-          .order("full_name");
-        if (!error && data) {
-          remoteElders = data;
-        }
-      } catch (e) {
-        console.warn("Could not load from Supabase:", e);
-      }
-
-      const localEldersStr = typeof window !== "undefined" ? localStorage.getItem("local-elders") : null;
-      const localElders = localEldersStr ? JSON.parse(localEldersStr) : [];
-
-      const merged = [...remoteElders];
-      localElders.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged.sort((a, b) => a.full_name.localeCompare(b.full_name));
+      const res = await fetch(`${API_URL()}/elders`);
+      const data = await res.json();
+      return data.sort((a: any, b: any) =>
+        (a.full_name || "").localeCompare(b.full_name || ""),
+      );
     },
   });
 
   const addElder = useMutation({
-    mutationFn: async (payload: { full_name: string; birth_date: string | null; medical_notes: string | null; photo_url: string | null }) => {
+    mutationFn: async (payload: {
+      full_name: string;
+      birth_date: string | null;
+      medical_notes: string | null;
+      photo_url: string | null;
+    }) => {
       const newElder = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         ...payload,
         active: true,
-        created_by: userId || "0e7874c3-a937-4158-a0ab-949991be81b9",
         created_at: new Date().toISOString(),
       };
-
-      // Salva no localStorage
-      const localEldersStr = localStorage.getItem("local-elders");
-      const localElders = localEldersStr ? JSON.parse(localEldersStr) : [];
-      localElders.push(newElder);
-      localStorage.setItem("local-elders", JSON.stringify(localElders));
-
-      // Tenta salvar no Supabase
-      try {
-        const { error } = await supabase.from("elders").insert(newElder);
-        if (error) {
-          console.warn("Supabase insert warning:", error.message);
-        }
-      } catch (e) {
-        console.warn("Failed to save to remote Supabase, saved locally:", e);
-      }
+      const res = await fetch(`${API_URL()}/elders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newElder),
+      });
+      if (!res.ok) throw new Error("Erro ao salvar no servidor.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["elders-list"] });
-      queryClient.invalidateQueries({ queryKey: ["elders"] });
       toast.success("Idoso cadastrado!");
       setPhotoUrl(null);
       setOpen(false);
     },
-    onError: () => toast.error("Não foi possível cadastrar."),
+    onError: (err: Error) =>
+      toast.error(err.message || "Nao foi possivel cadastrar."),
   });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,41 +120,73 @@ function IdososPage() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle className="font-display">Cadastrar idoso</DialogTitle>
+                <DialogTitle className="font-display">
+                  Cadastrar idoso
+                </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleAdd} className="space-y-4">
-                <div className="space-y-1.5 flex flex-col items-center">
+                <div className="flex flex-col items-center space-y-1.5">
                   <Label className="self-start">Foto do idoso</Label>
-                  <label className="relative flex h-24 w-24 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 bg-secondary hover:border-primary/50 transition-colors overflow-hidden">
-                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                  <label className="relative flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-muted-foreground/30 bg-secondary transition-colors hover:border-primary/50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handlePhotoChange}
+                    />
                     {photoUrl ? (
-                      <img src={photoUrl} alt="Preview" className="h-full w-full object-cover" />
+                      <img
+                        src={photoUrl}
+                        alt="Preview"
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
-                      <div className="text-center text-xs text-muted-foreground flex flex-col items-center gap-1">
+                      <div className="flex flex-col items-center gap-1 text-center text-xs text-muted-foreground">
                         <Camera className="h-6 w-6 text-muted-foreground" />
                         <span>Adicionar</span>
                       </div>
                     )}
                   </label>
                   {photoUrl && (
-                    <button type="button" onClick={() => setPhotoUrl(null)} className="text-xs text-destructive hover:underline mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl(null)}
+                      className="mt-1 text-xs text-destructive hover:underline"
+                    >
                       Remover foto
                     </button>
                   )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="elder-name">Nome completo</Label>
-                  <Input id="elder-name" name="full_name" required maxLength={100} />
+                  <Input
+                    id="elder-name"
+                    name="full_name"
+                    required
+                    maxLength={100}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="elder-birth">Data de nascimento</Label>
                   <Input id="elder-birth" name="birth_date" type="date" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="elder-notes">Condições / observações médicas</Label>
-                  <Textarea id="elder-notes" name="medical_notes" maxLength={2000} rows={3} placeholder="Ex.: Hipertensão, diabetes tipo 2..." />
+                  <Label htmlFor="elder-notes">
+                    Condicoes / observacoes medicas
+                  </Label>
+                  <Textarea
+                    id="elder-notes"
+                    name="medical_notes"
+                    maxLength={2000}
+                    rows={3}
+                    placeholder="Ex.: Hipertensao, diabetes tipo 2..."
+                  />
                 </div>
-                <Button type="submit" className="w-full" disabled={addElder.isPending}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={addElder.isPending}
+                >
                   {addElder.isPending ? "Salvando..." : "Cadastrar"}
                 </Button>
               </form>
@@ -188,8 +196,12 @@ function IdososPage() {
       </div>
 
       <div className="space-y-2">
-        {elders?.map((elder) => (
-          <Link key={elder.id} to="/idosos/$elderId" params={{ elderId: elder.id }}>
+        {elders?.map((elder: any) => (
+          <Link
+            key={elder.id}
+            to="/idosos/$elderId"
+            params={{ elderId: elder.id }}
+          >
             <Card className="mb-2 transition-shadow hover:shadow-md">
               <CardContent className="flex items-center gap-3 p-4">
                 {elder.photo_url ? (
@@ -206,7 +218,12 @@ function IdososPage() {
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">{elder.full_name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {[calcAge(elder.birth_date), elder.medical_notes?.slice(0, 60)].filter(Boolean).join(" · ")}
+                    {[
+                      calcAge(elder.birth_date),
+                      elder.medical_notes?.slice(0, 60),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -217,9 +234,7 @@ function IdososPage() {
         {elders && elders.length === 0 && (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              {role === "supervisor"
-                ? "Nenhum idoso cadastrado ainda. Clique em “Cadastrar idoso”."
-                : "Nenhum idoso vinculado a você ainda."}
+              Nenhum idoso cadastrado ainda.
             </CardContent>
           </Card>
         )}

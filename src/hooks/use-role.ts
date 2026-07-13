@@ -1,12 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 
 export type AppRole = "supervisor" | "cuidador";
 
+interface StoredUser {
+  id: string;
+  full_name: string;
+  email: string;
+  role: AppRole;
+}
+
 export function useRole() {
+  const stored = localStorage.getItem("cuidarbem_user");
+  const user: StoredUser | null = stored ? JSON.parse(stored) : null;
+
   return {
-    userId: "0e7874c3-a937-4158-a0ab-949991be81b9",
-    role: "supervisor" as AppRole,
+    userId: user?.id ?? null,
+    userName: user?.full_name ?? null,
+    role: (user?.role ?? "supervisor") as AppRole,
     isLoading: false,
   };
 }

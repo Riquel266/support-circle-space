@@ -2,12 +2,13 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { HeartHandshake } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const API_URL = () => `http://${window.location.hostname}:3001/api`;
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -25,47 +26,59 @@ function AuthPage() {
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: String(form.get("email") ?? "").trim(),
-      password: String(form.get("password") ?? ""),
-    });
-    setLoading(false);
-    if (error) {
-      toast.error("E-mail ou senha incorretos.");
-      return;
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
+
+    try {
+      const res = await fetch(`${API_URL()}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+        setLoading(false);
+        return;
+      }
+      localStorage.setItem("cuidarbem_user", JSON.stringify(data.user));
+      toast.success("Login realizado!");
+      navigate({ to: data.user.role === "supervisor" ? "/painel" : "/idosos", replace: true });
+    } catch {
+      toast.error("Erro ao conectar com o servidor.");
     }
-    navigate({ to: "/painel" });
+    setLoading(false);
   };
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const fullName = String(form.get("full_name") ?? "").trim();
-    if (fullName.length < 2) {
-      toast.error("Informe seu nome completo.");
-      return;
-    }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email: String(form.get("email") ?? "").trim(),
-      password: String(form.get("password") ?? ""),
-      options: {
-        emailRedirectTo: window.location.origin,
-        data: { full_name: fullName, role: "supervisor" },
-      },
-    });
-    setLoading(false);
-    if (error) {
-      toast.error(
-        error.message.includes("already")
-          ? "Este e-mail já está cadastrado."
-          : "Não foi possível criar a conta. " + error.message,
-      );
-      return;
+    const form = new FormData(e.currentTarget);
+    const full_name = String(form.get("full_name") ?? "").trim();
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
+
+    try {
+      const res = await fetch(`${API_URL()}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name, email, password }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+        setLoading(false);
+        return;
+      }
+      localStorage.setItem("cuidarbem_user", JSON.stringify(data.user));
+      toast.success("Conta criada!");
+      navigate({ to: data.user.role === "supervisor" ? "/painel" : "/idosos", replace: true });
+    } catch {
+      toast.error("Erro ao conectar com o servidor.");
     }
-    toast.success("Conta criada! Verifique seu e-mail para confirmar, depois entre.");
+    setLoading(false);
   };
 
   return (

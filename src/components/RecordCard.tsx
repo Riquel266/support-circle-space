@@ -1,13 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
 import { Activity, Pill, Utensils, HeartPulse, ClipboardList, Droplet } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   RECORD_TYPE_LABELS,
   formatRecordData,
   formatDateTime,
-  type CareRecord,
   type RecordType,
 } from "@/lib/care";
 
@@ -21,7 +18,7 @@ const TYPE_ICONS: Record<RecordType, typeof Activity> = {
 };
 
 interface RecordCardProps {
-  record: CareRecord;
+  record: any;
   caregiverName?: string;
   elderName?: string;
   showSelfie?: boolean;
@@ -29,26 +26,7 @@ interface RecordCardProps {
 
 export function RecordCard({ record, caregiverName, elderName, showSelfie = true }: RecordCardProps) {
   const Icon = TYPE_ICONS[record.record_type as RecordType] ?? Activity;
-
-  const { data: selfieUrl } = useQuery({
-    queryKey: ["selfie", record.id],
-    enabled: showSelfie && !!record.selfie_path,
-    staleTime: 30 * 60_000,
-    queryFn: async () => {
-      if ((record as any).selfie_base64) {
-        return (record as any).selfie_base64;
-      }
-      try {
-        const { data } = await supabase.storage
-          .from("assinaturas")
-          .createSignedUrl(record.selfie_path, 3600);
-        return data?.signedUrl ?? null;
-      } catch (e) {
-        console.warn("Could not load remote selfie:", e);
-        return null;
-      }
-    },
-  });
+  const selfieUrl = showSelfie ? (record.selfie_base64 || null) : null;
 
   return (
     <Card className="overflow-hidden">

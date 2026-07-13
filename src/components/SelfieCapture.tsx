@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, RefreshCw, Check } from "lucide-react";
+import { Camera, RefreshCw, Check, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface SelfieCaptureProps {
@@ -10,6 +10,7 @@ interface SelfieCaptureProps {
 export function SelfieCapture({ onCapture, onClear }: SelfieCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
@@ -36,7 +37,9 @@ export function SelfieCapture({ onCapture, onClear }: SelfieCaptureProps) {
         }
       });
     } catch {
-      setError("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
+      setError(
+        "Camera indisponivel. Selecione uma foto da galeria.",
+      );
     }
   }, []);
 
@@ -45,7 +48,6 @@ export function SelfieCapture({ onCapture, onClear }: SelfieCaptureProps) {
       stopCamera();
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const capture = () => {
@@ -80,9 +82,50 @@ export function SelfieCapture({ onCapture, onClear }: SelfieCaptureProps) {
     );
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 480;
+      canvas.height = 480;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const size = Math.min(img.width, img.height);
+      ctx.drawImage(
+        img,
+        (img.width - size) / 2,
+        (img.height - size) / 2,
+        size,
+        size,
+        0,
+        0,
+        480,
+        480,
+      );
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return;
+          URL.revokeObjectURL(url);
+          setPreviewUrl(URL.createObjectURL(blob));
+          onCapture(blob);
+        },
+        "image/jpeg",
+        0.85,
+      );
+    };
+    img.src = url;
+    e.target.value = "";
+  };
+
   const retake = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
+    setError(null);
     onClear();
     startCamera();
   };
@@ -91,13 +134,24 @@ export function SelfieCapture({ onCapture, onClear }: SelfieCaptureProps) {
     <div className="space-y-3">
       <div className="relative mx-auto aspect-square w-full max-w-[280px] overflow-hidden rounded-2xl border-2 border-dashed border-border bg-muted">
         {previewUrl ? (
-          <img src={previewUrl} alt="Assinatura facial capturada" className="h-full w-full object-cover" />
+          <img
+            src={previewUrl}
+            alt="Assinatura facial capturada"
+            className="h-full w-full object-cover"
+          />
         ) : cameraOn ? (
-          <video ref={videoRef} playsInline muted className="h-full w-full -scale-x-100 object-cover" />
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="h-full w-full -scale-x-100 object-cover"
+          />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
             <Camera className="h-8 w-8" />
-            <p className="text-sm">A assinatura facial confirma quem fez o registro</p>
+            <p className="text-sm">
+              A assinatura facial confirma quem fez o registro
+            </p>
           </div>
         )}
         {previewUrl && (
@@ -106,7 +160,16 @@ export function SelfieCapture({ onCapture, onClear }: SelfieCaptureProps) {
           </div>
         )}
       </div>
-      {error && <p className="text-center text-sm text-destructive">{error}</p>}
+      {error && (
+        <p className="text-center text-sm text-destructive">{error}</p>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
       <div className="flex justify-center gap-2">
         {previewUrl ? (
           <Button type="button" variant="outline" size="sm" onClick={retake}>
@@ -117,9 +180,28 @@ export function SelfieCapture({ onCapture, onClear }: SelfieCaptureProps) {
             <Camera className="mr-1 h-4 w-4" /> Capturar assinatura facial
           </Button>
         ) : (
-          <Button type="button" variant="secondary" size="sm" onClick={startCamera}>
-            <Camera className="mr-1 h-4 w-4" /> Abrir câmera
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={startCamera}
+            >
+              <Camera className="mr-1 h-4 w-4" /> Camera
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+            >
+              <Upload className="mr-1 h-4 w-4" /> Galeria
+            </Button>
+          </>
         )}
       </div>
     </div>

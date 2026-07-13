@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { generateId } from "@/lib/utils";
 import { useRole } from "@/hooks/use-role";
 import { AppShell } from "@/components/AppShell";
 import { SelfieCapture } from "@/components/SelfieCapture";
@@ -19,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RECORD_TYPE_LABELS, type RecordType } from "@/lib/care";
+
+const API_URL = () => `http://${window.location.hostname}:3001/api`;
 
 export const Route = createFileRoute("/_authenticated/registrar")({
   component: RegistrarPage,
@@ -44,36 +45,32 @@ function RegistrarPage() {
     enabled: !!role,
     queryFn: async () => {
       if (role === "supervisor") {
-        let remoteElders: any[] = [];
-        try {
-          const { data, error } = await supabase.from("elders").select("*").eq("active", true);
-          if (!error && data) remoteElders = data;
-        } catch (e) {
-          console.warn(e);
-        }
-
-        const localEldersStr = typeof window !== "undefined" ? localStorage.getItem("local-elders") : null;
-        const localElders = localEldersStr ? JSON.parse(localEldersStr) : [];
-
-        const merged = [...remoteElders];
-        localElders.forEach((local: any) => {
-          if (!merged.some((m) => m.id === local.id)) {
-            merged.push(local);
-          }
-        });
-
-        return merged.map((e) => ({
-          elder_id: e.id,
-          elders: { id: e.id, full_name: e.full_name },
-        }));
+        const res = await fetch(`${API_URL()}/elders`);
+        const data = await res.json();
+        return data
+          .filter((e: any) => e.active !== false)
+          .map((e: any) => ({
+            elder_id: e.id,
+            elders: { id: e.id, full_name: e.full_name },
+          }));
       }
 
-      const { data, error } = await supabase
-        .from("assignments")
-        .select("elder_id, elders(id, full_name)")
-        .eq("caregiver_id", userId!);
-      if (error) throw error;
-      return data;
+      const res = await fetch(`${API_URL()}/assignments`);
+      const allAssigns = await res.json();
+      const myAssigns = allAssigns.filter(
+        (a: any) => a.caregiver_id === userId,
+      );
+
+      const eldersRes = await fetch(`${API_URL()}/elders`);
+      const allElders = await eldersRes.json();
+
+      return myAssigns.map((a: any) => {
+        const elder = allElders.find((e: any) => e.id === a.elder_id);
+        return {
+          elder_id: a.elder_id,
+          elders: { id: a.elder_id, full_name: elder?.full_name || "Idoso" },
+        };
+      });
     },
   });
 
@@ -90,15 +87,21 @@ function RegistrarPage() {
     const form = new FormData(e.currentTarget);
     const val = (k: string) => String(form.get(k) ?? "").trim();
 
-    const recordsToInsert: Array<{ record_type: string; data: any; notes: string | null }> = [];
+    const recordsToInsert: Array<{
+      record_type: string;
+      data: any;
+      notes: string | null;
+    }> = [];
 
-    // 1. Sinais Vitais
     const svData: any = {};
-    if (form.get("pressao_sistolica") && val("pressao_sistolica")) svData.pressao_sistolica = Number(val("pressao_sistolica"));
-    if (form.get("pressao_diastolica") && val("pressao_diastolica")) svData.pressao_diastolica = Number(val("pressao_diastolica"));
-    if (form.get("temperatura") && val("temperatura")) svData.temperatura = Number(val("temperatura").replace(",", "."));
-    if (form.get("glicemia") && val("glicemia")) svData.glicemia = Number(val("glicemia"));
-    if (form.get("batimentos") && val("batimentos")) svData.batimentos = Number(val("batimentos"));
+    if (val("pressao_sistolica"))
+      svData.pressao_sistolica = Number(val("pressao_sistolica"));
+    if (val("pressao_diastolica"))
+      svData.pressao_diastolica = Number(val("pressao_diastolica"));
+    if (val("temperatura"))
+      svData.temperatura = Number(val("temperatura").replace(",", "."));
+    if (val("glicemia")) svData.glicemia = Number(val("glicemia"));
+    if (val("batimentos")) svData.batimentos = Number(val("batimentos"));
 
     if (Object.keys(svData).length > 0) {
       recordsToInsert.push({
@@ -108,7 +111,6 @@ function RegistrarPage() {
       });
     }
 
-    // 2. Medicação
     if (val("medicamento")) {
       recordsToInsert.push({
         record_type: "medicacao",
@@ -121,7 +123,6 @@ function RegistrarPage() {
       });
     }
 
-    // 3. Alimentação
     if (val("refeicao") && val("refeicao") !== "none") {
       recordsToInsert.push({
         record_type: "alimentacao",
@@ -134,7 +135,6 @@ function RegistrarPage() {
       });
     }
 
-    // 4. Diurese
     if (val("teve_diurese") && val("teve_diurese") !== "none") {
       recordsToInsert.push({
         record_type: "diurese",
@@ -146,7 +146,6 @@ function RegistrarPage() {
       });
     }
 
-    // 5. Ocorrência
     if (val("tipo_ocorrencia") && val("tipo_ocorrencia") !== "none") {
       recordsToInsert.push({
         record_type: "ocorrencia",
@@ -158,16 +157,17 @@ function RegistrarPage() {
       });
     }
 
-    // 6. Relatório de Plantão
     let handoverToInsert: any = null;
     if (val("resumo_plantao") || val("intercorrencias") || val("notes_plantao")) {
       const resumo = val("resumo_plantao");
       if (!resumo) {
-        toast.error("Para enviar o Relatório de Plantão, escreva um resumo.");
+        toast.error("Para enviar o Relatorio de Plantao, escreva um resumo.");
         return;
       }
       if (resumo.length < 15) {
-        toast.error("Para enviar o Relatório de Plantão completo, o resumo deve conter pelo menos 15 caracteres.");
+        toast.error(
+          "Para enviar o Relatorio de Plantao completo, o resumo deve conter pelo menos 15 caracteres.",
+        );
         return;
       }
       handoverToInsert = {
@@ -179,13 +179,14 @@ function RegistrarPage() {
     }
 
     if (recordsToInsert.length === 0 && !handoverToInsert) {
-      toast.error("Preencha pelo menos um cuidado ou relatório de plantão para salvar.");
+      toast.error(
+        "Preencha pelo menos um cuidado ou relatorio de plantao para salvar.",
+      );
       return;
     }
 
     setSaving(true);
     try {
-      // Converte a selfie local
       let selfieBase64: string | null = null;
       if (selfie) {
         const reader = new FileReader();
@@ -195,105 +196,50 @@ function RegistrarPage() {
         });
       }
 
-      // 1. Salva os registros de cuidado normais se existirem
       if (recordsToInsert.length > 0) {
-        const localRecordsStr = typeof window !== "undefined" ? localStorage.getItem("local-care-records") : null;
-        const localRecords = localRecordsStr ? JSON.parse(localRecordsStr) : [];
-
         for (const rec of recordsToInsert) {
-          const newRecordId = crypto.randomUUID();
-          const path = `${userId || "0e7874c3-a937-4158-a0ab-949991be81b9"}/${Date.now()}-${newRecordId}.jpg`;
-
-          const localRecord = {
-            id: newRecordId,
+          const newRecord = {
+            id: generateId(),
             elder_id: elderId,
-            caregiver_id: userId || "0e7874c3-a937-4158-a0ab-949991be81b9",
+            caregiver_id: userId || "00000000-0000-0000-0000-000000000001",
             record_type: rec.record_type,
             data: rec.data,
             notes: rec.notes || null,
-            selfie_path: path,
             selfie_base64: selfieBase64,
             created_at: new Date().toISOString(),
           };
 
-          localRecords.push(localRecord);
-
-          // Tenta salvar no Supabase
-          try {
-            if (selfie) {
-              await supabase.storage
-                .from("assinaturas")
-                .upload(path, selfie, { contentType: "image/jpeg" });
-            }
-            await supabase.from("care_records").insert({
-              id: newRecordId,
-              elder_id: elderId,
-              caregiver_id: userId || "0e7874c3-a937-4158-a0ab-949991be81b9",
-              record_type: rec.record_type as "alimentacao" | "diurese" | "medicacao" | "ocorrencia" | "passagem_plantao" | "sinais_vitais",
-              data: rec.data,
-              notes: rec.notes || null,
-              selfie_path: path,
-            });
-          } catch (supabaseErr) {
-            console.warn("Could not save care record to Supabase, saved locally:", supabaseErr);
-          }
-        }
-        if (typeof window !== "undefined") {
-          localStorage.setItem("local-care-records", JSON.stringify(localRecords));
+          await fetch(`${API_URL()}/records`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newRecord),
+          });
         }
       }
 
-      // 2. Salva o Relatório de Plantão separadamente se existir
       if (handoverToInsert) {
-        const handoverId = crypto.randomUUID();
-        const path = `${userId || "0e7874c3-a937-4158-a0ab-949991be81b9"}/${Date.now()}-${handoverId}.jpg`;
         const handoverRecord = {
-          id: handoverId,
+          id: generateId(),
           elder_id: elderId,
-          caregiver_id: userId || "0e7874c3-a937-4158-a0ab-949991be81b9",
-          resumo_plantao: handoverToInsert.resumo_plantao,
-          estado_humor: handoverToInsert.estado_humor,
-          intercorrencias: handoverToInsert.intercorrencias,
-          notes: handoverToInsert.notes,
-          selfie_path: path,
+          caregiver_id: userId || "00000000-0000-0000-0000-000000000001",
+          record_type: "passagem_plantao",
+          data: handoverToInsert,
           selfie_base64: selfieBase64,
           created_at: new Date().toISOString(),
         };
 
-        const localHandoversStr = typeof window !== "undefined" ? localStorage.getItem("local-shift-handovers") : null;
-        const localHandovers = localHandoversStr ? JSON.parse(localHandoversStr) : [];
-        localHandovers.push(handoverRecord);
-        if (typeof window !== "undefined") {
-          localStorage.setItem("local-shift-handovers", JSON.stringify(localHandovers));
-        }
-
-        // Tenta salvar no Supabase
-        try {
-          if (selfie) {
-            await supabase.storage
-              .from("assinaturas")
-              .upload(path, selfie, { contentType: "image/jpeg" });
-          }
-          await supabase.from("shift_handovers").insert({
-            id: handoverId,
-            elder_id: elderId,
-            caregiver_id: userId || "0e7874c3-a937-4158-a0ab-949991be81b9",
-            resumo_plantao: handoverToInsert.resumo_plantao,
-            estado_humor: handoverToInsert.estado_humor,
-            intercorrencias: handoverToInsert.intercorrencias,
-            notes: handoverToInsert.notes,
-            selfie_path: path,
-          });
-        } catch (supabaseErr) {
-          console.warn("Could not save shift handover to remote Supabase, saved locally:", supabaseErr);
-        }
+        await fetch(`${API_URL()}/records`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(handoverRecord),
+        });
       }
 
-      toast.success("Todos os cuidados e relatórios preenchidos foram registrados!");
-      navigate({ to: "/painel" });
+      toast.success("Relatório enviado ao supervisor com sucesso!");
+      navigate({ to: "/idosos/$elderId", params: { elderId } });
     } catch (err) {
       console.error(err);
-      toast.error("Não foi possível salvar os registros. Tente novamente.");
+      toast.error("Nao foi possivel salvar os registros. Tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -302,16 +248,20 @@ function RegistrarPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-lg space-y-6">
-        <h1 className="font-display text-2xl font-bold text-center">Registrar Cuidados do Idoso</h1>
-        <p className="text-sm text-muted-foreground text-center -mt-4">
-          Preencha abaixo as ações de cuidado realizadas neste período. Deixe em branco as seções que não foram executadas.
+        <h1 className="text-center font-display text-2xl font-bold">
+          Registrar Cuidados do Idoso
+        </h1>
+        <p className="-mt-4 text-center text-sm text-muted-foreground">
+          Preencha abaixo as acoes de cuidado realizadas neste periodo. Deixe em
+          branco as secoes que nao foram executadas.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 1. SELEÇÃO DO IDOSO */}
-          <Card className="shadow-sm border-primary/20">
+          <Card className="border-primary/20 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base">1. Idoso</CardTitle>
+              <CardTitle className="font-display text-base">
+                1. Idoso
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
@@ -321,7 +271,7 @@ function RegistrarPage() {
                     <SelectValue placeholder="Selecione o idoso..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {assignments?.map((a) =>
+                    {assignments?.map((a: any) =>
                       a.elders ? (
                         <SelectItem key={a.elder_id} value={a.elder_id}>
                           {a.elders.full_name}
@@ -334,119 +284,197 @@ function RegistrarPage() {
             </CardContent>
           </Card>
 
-          {/* 2. SINAIS VITAIS */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base text-primary">2. Sinais Vitais (Opcional)</CardTitle>
+              <CardTitle className="font-display text-base text-primary">
+                2. Sinais Vitais (Opcional)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="ps">Pressão sistólica</Label>
-                  <Input id="ps" name="pressao_sistolica" type="number" inputMode="numeric" placeholder="120" min={40} max={300} />
+                  <Label htmlFor="ps">Pressao sistolica</Label>
+                  <Input
+                    id="ps"
+                    name="pressao_sistolica"
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="120"
+                    min={40}
+                    max={300}
+                  />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pd">Pressão diastólica</Label>
-                  <Input id="pd" name="pressao_diastolica" type="number" inputMode="numeric" placeholder="80" min={20} max={200} />
+                  <Label htmlFor="pd">Pressao diastolica</Label>
+                  <Input
+                    id="pd"
+                    name="pressao_diastolica"
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="80"
+                    min={20}
+                    max={200}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="temp">Temp. (°C)</Label>
-                  <Input id="temp" name="temperatura" placeholder="36.5" inputMode="decimal" />
+                  <Label htmlFor="temp">Temp. (C)</Label>
+                  <Input
+                    id="temp"
+                    name="temperatura"
+                    placeholder="36.5"
+                    inputMode="decimal"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="glic">Glicemia</Label>
-                  <Input id="glic" name="glicemia" type="number" inputMode="numeric" placeholder="99" min={10} max={800} />
+                  <Input
+                    id="glic"
+                    name="glicemia"
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="99"
+                    min={10}
+                    max={800}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="bpm">Batimentos</Label>
-                  <Input id="bpm" name="batimentos" type="number" inputMode="numeric" placeholder="72" min={20} max={250} />
+                  <Input
+                    id="bpm"
+                    name="batimentos"
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="72"
+                    min={20}
+                    max={250}
+                  />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_sinais_vitais">Observação / Nota</Label>
-                <Input id="notes_sinais_vitais" name="notes_sinais_vitais" placeholder="Descreva qualquer alteração de sinais vitais..." />
+                <Label htmlFor="notes_sinais_vitais">Observacao / Nota</Label>
+                <Input
+                  id="notes_sinais_vitais"
+                  name="notes_sinais_vitais"
+                  placeholder="Descreva qualquer alteracao de sinais vitais..."
+                />
               </div>
             </CardContent>
           </Card>
 
-          {/* 3. MEDICAÇÃO */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base text-primary">3. Medicação (Opcional)</CardTitle>
+              <CardTitle className="font-display text-base text-primary">
+                3. Medicacao (Opcional)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="med">Medicamento</Label>
-                <Input id="med" name="medicamento" maxLength={120} placeholder="Ex.: Losartana 50mg" />
+                <Input
+                  id="med"
+                  name="medicamento"
+                  maxLength={120}
+                  placeholder="Ex.: Losartana 50mg"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dose">Dose</Label>
-                <Input id="dose" name="dose" maxLength={60} placeholder="Ex.: 1 comprimido" />
+                <Input
+                  id="dose"
+                  name="dose"
+                  maxLength={60}
+                  placeholder="Ex.: 1 comprimido"
+                />
               </div>
-              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                <Checkbox checked={administrado} onCheckedChange={(c) => setAdministrado(c === true)} />
-                Medicação administrada
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                <Checkbox
+                  checked={administrado}
+                  onCheckedChange={(c) => setAdministrado(c === true)}
+                />
+                Medicacao administrada
               </label>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_medicacao">Observação / Nota</Label>
-                <Input id="notes_medicacao" name="notes_medicacao" placeholder="Ex.: Recusou, tomou com suco..." />
+                <Label htmlFor="notes_medicacao">Observacao / Nota</Label>
+                <Input
+                  id="notes_medicacao"
+                  name="notes_medicacao"
+                  placeholder="Ex.: Recusou, tomou com suco..."
+                />
               </div>
             </CardContent>
           </Card>
 
-          {/* 4. ALIMENTAÇÃO E HIDRATAÇÃO */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base text-primary">4. Alimentação e Hidratação (Opcional)</CardTitle>
+              <CardTitle className="font-display text-base text-primary">
+                4. Alimentacao e Hidratacao (Opcional)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Refeição</Label>
+                  <Label>Refeicao</Label>
                   <Select name="refeicao" defaultValue="none">
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Não registrado</SelectItem>
-                      <SelectItem value="café da manhã">Café da manhã</SelectItem>
-                      <SelectItem value="almoço">Almoço</SelectItem>
+                      <SelectItem value="none">Nao registrado</SelectItem>
+                      <SelectItem value="cafe da manha">
+                        Cafe da manha
+                      </SelectItem>
+                      <SelectItem value="almoco">Almoco</SelectItem>
                       <SelectItem value="lanche">Lanche</SelectItem>
                       <SelectItem value="jantar">Jantar</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Aceitação</Label>
+                  <Label>Aceitacao</Label>
                   <Select name="aceitacao" defaultValue="total">
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="total">Comeu tudo</SelectItem>
-                      <SelectItem value="parcial">Comeu parcialmente</SelectItem>
+                      <SelectItem value="parcial">
+                        Comeu parcialmente
+                      </SelectItem>
                       <SelectItem value="recusou">Recusou</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="agua">Água ingerida (ml)</Label>
-                <Input id="agua" name="agua_ml" type="number" inputMode="numeric" placeholder="200" min={0} max={5000} />
+                <Label htmlFor="agua">Agua ingerida (ml)</Label>
+                <Input
+                  id="agua"
+                  name="agua_ml"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="200"
+                  min={0}
+                  max={5000}
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_alimentacao">Observação / Nota</Label>
-                <Input id="notes_alimentacao" name="notes_alimentacao" placeholder="Teve dificuldade para engolir, etc..." />
+                <Label htmlFor="notes_alimentacao">Observacao / Nota</Label>
+                <Input
+                  id="notes_alimentacao"
+                  name="notes_alimentacao"
+                  placeholder="Teve dificuldade para engolir, etc..."
+                />
               </div>
             </CardContent>
           </Card>
 
-          {/* 5. DIURESE / ELIMINAÇÕES */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base text-primary">5. Diurese / Eliminações (Opcional)</CardTitle>
+              <CardTitle className="font-display text-base text-primary">
+                5. Diurese / Eliminacoes (Opcional)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
@@ -456,9 +484,9 @@ function RegistrarPage() {
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Não registrado</SelectItem>
+                    <SelectItem value="none">Nao registrado</SelectItem>
                     <SelectItem value="Sim">Sim</SelectItem>
-                    <SelectItem value="Não">Não</SelectItem>
+                    <SelectItem value="Nao">Nao</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -470,34 +498,49 @@ function RegistrarPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Urina clara">Clara / Normal</SelectItem>
-                    <SelectItem value="Urina escura/concentrada">Escura / Concentrada</SelectItem>
-                    <SelectItem value="Urina com presença de sangue">Com presença de hematúria (sangue)</SelectItem>
-                    <SelectItem value="Outro">Outro (detalhar na observação)</SelectItem>
+                    <SelectItem value="Urina escura/concentrada">
+                      Escura / Concentrada
+                    </SelectItem>
+                    <SelectItem value="Urina com presenca de sangue">
+                      Com presenca de hematuria (sangue)
+                    </SelectItem>
+                    <SelectItem value="Outro">
+                      Outro (detalhar na observacao)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_diurese">Observação / Nota</Label>
-                <Input id="notes_diurese" name="notes_diurese" placeholder="Disúria, odor forte, fralda muito cheia..." />
+                <Label htmlFor="notes_diurese">Observacao / Nota</Label>
+                <Input
+                  id="notes_diurese"
+                  name="notes_diurese"
+                  placeholder="Disuria, odor forte, fralda muito cheia..."
+                />
               </div>
             </CardContent>
           </Card>
 
-          {/* 6. ESTADO GERAL / COMPORTAMENTO */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base text-primary">6. Alteração de Comportamento (Opcional)</CardTitle>
+              <CardTitle className="font-display text-base text-primary">
+                6. Alteracao de Comportamento (Opcional)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Tipo de alteração</Label>
+                <Label>Tipo de alteracao</Label>
                 <Select name="tipo_ocorrencia" defaultValue="none">
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Nenhuma alteração registrada</SelectItem>
-                    <SelectItem value="humor">Humor / estado emocional</SelectItem>
+                    <SelectItem value="none">
+                      Nenhuma alteracao registrada
+                    </SelectItem>
+                    <SelectItem value="humor">
+                      Humor / estado emocional
+                    </SelectItem>
                     <SelectItem value="sono">Sono</SelectItem>
                     <SelectItem value="queda">Queda</SelectItem>
                     <SelectItem value="dor">Dor</SelectItem>
@@ -519,21 +562,34 @@ function RegistrarPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_ocorrencia">Observação / Nota</Label>
-                <Input id="notes_ocorrencia" name="notes_ocorrencia" placeholder="Especifique a alteração ou queixas..." />
+                <Label htmlFor="notes_ocorrencia">Observacao / Nota</Label>
+                <Input
+                  id="notes_ocorrencia"
+                  name="notes_ocorrencia"
+                  placeholder="Especifique a alteracao ou queixas..."
+                />
               </div>
             </CardContent>
           </Card>
 
-          {/* 7. RELATÓRIO DE PLANTÃO / PASSAGEM */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base text-primary">7. Relatório de Plantão / Passagem (Opcional)</CardTitle>
+              <CardTitle className="font-display text-base text-primary">
+                7. Relatorio de Plantao / Passagem (Opcional)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="resumo">Resumo do plantão (atividades, cuidados)</Label>
-                <Textarea id="resumo" name="resumo_plantao" maxLength={2000} rows={4} placeholder="Ex.: O idoso passou o dia bem, tomou todos os remédios da manhã, almoçou toda a refeição e realizou caminhada..." />
+                <Label htmlFor="resumo">
+                  Resumo do plantao (atividades, cuidados)
+                </Label>
+                <Textarea
+                  id="resumo"
+                  name="resumo_plantao"
+                  maxLength={2000}
+                  rows={4}
+                  placeholder="Ex.: O idoso passou o dia bem, tomou todos os remedios da manha, almocou toda a refeicao e realizou caminhada..."
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Estado de humor / Comportamento principal</Label>
@@ -543,38 +599,65 @@ function RegistrarPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="calmo">Calmo / Cooperativo</SelectItem>
-                    <SelectItem value="agitado">Agitado / Ansioso</SelectItem>
-                    <SelectItem value="sonolento">Sonolento / Apático</SelectItem>
-                    <SelectItem value="alegre">Alegre / Comunicativo</SelectItem>
+                    <SelectItem value="agitado">
+                      Agitado / Ansioso
+                    </SelectItem>
+                    <SelectItem value="sonolento">
+                      Sonolento / Apatico
+                    </SelectItem>
+                    <SelectItem value="alegre">
+                      Alegre / Comunicativo
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="intercorrencia">Intercorrências do período (opcional)</Label>
-                <Input id="intercorrencia" name="intercorrencias" placeholder="Ex.: Nenhuma, ou descreva se houve algo fora do comum" />
+                <Label htmlFor="intercorrencia">
+                  Intercorrencias do periodo (opcional)
+                </Label>
+                <Input
+                  id="intercorrencia"
+                  name="intercorrencias"
+                  placeholder="Ex.: Nenhuma, ou descreva se houve algo fora do comum"
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_plantao">Observação / Nota</Label>
-                <Input id="notes_plantao" name="notes_plantao" placeholder="Informações adicionais para o colega..." />
+                <Label htmlFor="notes_plantao">Observacao / Nota</Label>
+                <Input
+                  id="notes_plantao"
+                  name="notes_plantao"
+                  placeholder="Informacoes adicionais para o colega..."
+                />
               </div>
             </CardContent>
           </Card>
 
-          {/* 8. ASSINATURA FACIAL (OBRIGATÓRIO) */}
-          <Card className="shadow-sm border-primary/25">
+          <Card className="border-primary/25 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base">8. Assinatura facial (Obrigatório)</CardTitle>
+              <CardTitle className="font-display text-base">
+                8. Assinatura facial (Obrigatorio)
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <SelfieCapture onCapture={setSelfie} onClear={() => setSelfie(null)} />
+              <SelfieCapture
+                onCapture={setSelfie}
+                onClear={() => setSelfie(null)}
+              />
             </CardContent>
           </Card>
 
-          <Button type="submit" size="lg" className="w-full shadow-lg text-base h-12" disabled={saving || !selfie || !elderId}>
-            {saving ? "Salvando registros..." : "Salvar todos os cuidados preenchidos"}
+          <Button
+            type="submit"
+            size="lg"
+            className="h-12 w-full text-base shadow-lg"
+            disabled={saving || !selfie || !elderId}
+          >
+            {saving
+              ? "Salvando registros..."
+              : "Salvar todos os cuidados preenchidos"}
           </Button>
         </form>
       </div>
     </AppShell>
   );
-}
+}

@@ -1,9 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { BellRing, Users, ClipboardList, HeartPulse, CheckCircle2, ClipboardPlus } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { BellRing, Users, ClipboardList, HeartPulse, CheckCircle2, ClipboardPlus, FileDown } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useRole } from "@/hooks/use-role";
 import { AppShell } from "@/components/AppShell";
 import { RecordCard } from "@/components/RecordCard";
@@ -13,7 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { SEVERITY_LABELS, formatDateTime, type Alert, type CareRecord } from "@/lib/care";
+
+const API_URL = () => `http://${window.location.hostname}:3001/api`;
 
 export const Route = createFileRoute("/_authenticated/painel")({
   component: PainelPage,
@@ -21,7 +24,19 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 function PainelPage() {
   const { role, userId, isLoading } = useRole();
-  const [activeTab, setActiveTab] = useState<"supervisor" | "cuidador" | "passagens">("supervisor");
+  const [activeTab, setActiveTab] = useState<"supervisor" | "passagens">("supervisor");
+
+  if (!isLoading && role !== "supervisor") {
+    return (
+      <AppShell>
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground">
+            Apenas supervisores podem acessar o Painel.
+          </CardContent>
+        </Card>
+      </AppShell>
+    );
+  }
 
   const tabBtn = (id: typeof activeTab, label: string) => (
     <button
@@ -48,17 +63,14 @@ function PainelPage() {
           <div className="flex justify-center mb-6">
             <div className="inline-flex flex-wrap justify-center rounded-xl bg-secondary p-1 border gap-1">
               {tabBtn("supervisor", "Painel Supervisor (Adm)")}
-              {tabBtn("passagens", "Passagens de Plantão")}
-              {tabBtn("cuidador", "Visão do Cuidador")}
+              {tabBtn("passagens", "Passagens de Plantao")}
             </div>
           </div>
 
           {activeTab === "supervisor" ? (
             <SupervisorDashboard />
-          ) : activeTab === "passagens" ? (
-            <HandoversTab />
           ) : (
-            <CaregiverDashboard userId={userId!} />
+            <HandoversTab />
           )}
         </div>
       ) : (
@@ -68,152 +80,61 @@ function PainelPage() {
   );
 }
 
-/* ---------------- SUPERVISOR ---------------- */
-
 function SupervisorDashboard() {
+  const { userId, userName } = useRole();
   const queryClient = useQueryClient();
-
-  // Realtime: novos registros e alertas
-  useEffect(() => {
-    const channel = supabase
-      .channel("painel-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "care_records" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["recent-records"] });
-          toast.info("Novo registro de cuidado recebido");
-        },
-      )
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "alerts" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["open-alerts"] });
-        toast.warning("Novo alerta gerado!");
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
 
   const { data: elders } = useQuery({
     queryKey: ["elders"],
     queryFn: async () => {
-      let remoteElders: any[] = [];
-      try {
-        const { data, error } = await supabase.from("elders").select("*").eq("active", true).order("full_name");
-        if (!error && data) {
-          remoteElders = data;
-        }
-      } catch (e) {
-        console.warn("Failed to fetch elders from Supabase:", e);
-      }
-
-      const localEldersStr = typeof window !== "undefined" ? localStorage.getItem("local-elders") : null;
-      const localElders = localEldersStr ? JSON.parse(localEldersStr) : [];
-
-      const merged = [...remoteElders];
-      localElders.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged.sort((a, b) => a.full_name.localeCompare(b.full_name));
+      const res = await fetch(`${API_URL()}/elders`);
+      const data = await res.json();
+      return data.sort((a: any, b: any) => a.full_name.localeCompare(b.full_name));
     },
   });
 
-  const { data: profiles } = useQuery({
-    queryKey: ["profiles"],
+  const { data: caregivers } = useQuery({
+    queryKey: ["caregivers"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*");
-      if (error) throw error;
-      return data;
+      const res = await fetch(`${API_URL()}/caregivers`);
+      return res.json();
     },
   });
 
   const { data: assignments } = useQuery({
     queryKey: ["all-assignments"],
     queryFn: async () => {
-      let remoteAssignments: any[] = [];
-      try {
-        const { data, error } = await supabase.from("assignments").select("*");
-        if (!error && data) remoteAssignments = data;
-      } catch (e) {
-        console.warn("Failed to fetch assignments from Supabase:", e);
-      }
-
-      const localAssignStr = typeof window !== "undefined" ? localStorage.getItem("local-assignments") : null;
-      const localAssigns = localAssignStr ? JSON.parse(localAssignStr) : [];
-
-      const merged = [...remoteAssignments];
-      localAssigns.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged;
+      const res = await fetch(`${API_URL()}/assignments`);
+      return res.json();
     },
   });
 
   const { data: records } = useQuery({
     queryKey: ["recent-records"],
     queryFn: async () => {
-      let remoteRecords: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from("care_records")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(50);
-        if (!error && data) remoteRecords = data;
-      } catch (e) {
-        console.warn("Failed to fetch care records from Supabase:", e);
-      }
-
-      const localRecordsStr = typeof window !== "undefined" ? localStorage.getItem("local-care-records") : null;
-      const localRecords = localRecordsStr ? JSON.parse(localRecordsStr) : [];
-
-      const merged = [...remoteRecords];
-      localRecords.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const res = await fetch(`${API_URL()}/records`);
+      const data = await res.json();
+      return data.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
   });
 
   const { data: alerts } = useQuery({
     queryKey: ["open-alerts"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("alerts")
-        .select("*")
-        .eq("resolved", false)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const res = await fetch(`${API_URL()}/records`);
+      const data = await res.json();
+      return data.filter((r: any) => r.record_type === "alerta" && !r.resolved);
     },
   });
 
-  const resolveAlert = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("alerts").update({ resolved: true }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["open-alerts"] });
-      toast.success("Alerta resolvido");
-    },
-  });
-
-
-
-
-  const profileName = (id: string) => profiles?.find((p) => p.id === id)?.full_name || "Cuidador";
-  const elderName = (id: string) => elders?.find((e) => e.id === id)?.full_name || "Idoso";
+  const profileName = (id: string) => {
+    if (id === userId) return userName || "Supervisor";
+    return caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+  };
+  const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Idoso";
 
   const today = new Date().toDateString();
-  const recordsToday = records?.filter((r) => new Date(r.created_at).toDateString() === today).length ?? 0;
+  const recordsToday = records?.filter((r: any) => new Date(r.created_at).toDateString() === today).length ?? 0;
 
   const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
   const recentRecords = records?.filter((r: any) => new Date(r.created_at) >= twelveHoursAgo) ?? [];
@@ -226,48 +147,20 @@ function SupervisorDashboard() {
         <StatCard icon={Users} label="Idosos ativos" value={elders?.length ?? 0} />
         <StatCard icon={ClipboardList} label="Registros hoje" value={recordsToday} />
         <StatCard icon={BellRing} label="Alertas abertos" value={alerts?.length ?? 0} highlight={(alerts?.length ?? 0) > 0} />
-        <StatCard icon={HeartPulse} label="Últimos registros" value={records?.length ?? 0} />
+        <StatCard icon={HeartPulse} label="Ultimos registros" value={records?.length ?? 0} />
       </div>
-
-      {alerts && alerts.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-display text-lg font-bold">Alertas</h2>
-          <div className="space-y-2">
-            {alerts.map((alert: Alert) => (
-              <Card key={alert.id} className={alert.severity === "critico" ? "border-destructive" : "border-warning"}>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <BellRing className={`h-5 w-5 shrink-0 ${alert.severity === "critico" ? "text-destructive" : "text-warning"}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={alert.severity === "critico" ? "destructive" : "secondary"}>
-                        {SEVERITY_LABELS[alert.severity]}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{formatDateTime(alert.created_at)}</span>
-                    </div>
-                    <p className="mt-1 text-sm font-semibold">{elderName(alert.elder_id)}</p>
-                    <p className="text-sm">{alert.message}</p>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => resolveAlert.mutate(alert.id)} disabled={resolveAlert.isPending}>
-                    <CheckCircle2 className="mr-1 h-4 w-4" /> Resolver
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section className="bg-card border rounded-2xl p-5 shadow-sm">
         <h2 className="mb-4 font-display text-lg font-bold flex items-center gap-2 text-foreground">
           <ClipboardList className="h-5 w-5 text-primary" />
-          Resumo de cuidados (últimas 12 horas)
+          Resumo de cuidados (ultimas 12 horas)
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {elders?.map((elder) => {
-            const elderRecs = recentRecords.filter((r) => r.elder_id === elder.id);
-            const elderAssigns = assignments?.filter((a) => a.elder_id === elder.id) ?? [];
+          {elders?.map((elder: any) => {
+            const elderRecs = recentRecords.filter((r: any) => r.elder_id === elder.id);
+            const elderAssigns = assignments?.filter((a: any) => a.elder_id === elder.id) ?? [];
             const caregiverNames = elderAssigns
-              .map((a) => profiles?.find((p) => p.id === a.caregiver_id)?.full_name)
+              .map((a: any) => caregivers?.find((c: any) => c.id === a.caregiver_id)?.full_name)
               .filter(Boolean)
               .join(", ");
             return (
@@ -290,26 +183,26 @@ function SupervisorDashboard() {
                 
                 {elderRecs.length > 0 ? (
                   <div className="space-y-1.5">
-                    {elderRecs.map((r) => {
+                    {elderRecs.map((r: any) => {
                       const time = new Date(r.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
                       let summary = "";
                       if (r.record_type === "sinais_vitais") {
                         const s = [];
-                        if (r.data.pressao_sistolica) s.push(`PA: ${r.data.pressao_sistolica}/${r.data.pressao_diastolica}`);
-                        if (r.data.temperatura) s.push(`T: ${r.data.temperatura}°C`);
+                        if (r.data?.pressao_sistolica) s.push(`PA: ${r.data.pressao_sistolica}/${r.data.pressao_diastolica}`);
+                        if (r.data?.temperatura) s.push(`T: ${r.data.temperatura}C`);
                         summary = `Sinais vitais (${s.join(", ")})`;
                       } else if (r.record_type === "medicacao") {
-                        summary = `Remédio: ${r.data.medicamento}`;
+                        summary = `Remedio: ${r.data?.medicamento}`;
                       } else if (r.record_type === "alimentacao") {
-                        summary = `Refeição: ${r.data.refeicao}`;
+                        summary = `Refeicao: ${r.data?.refeicao}`;
                       } else if (r.record_type === "diurese") {
-                        summary = `Diurese: ${r.data.teve_diurese} (${r.data.aspecto})`;
+                        summary = `Diurese: ${r.data?.teve_diurese} (${r.data?.aspecto})`;
                       } else if (r.record_type === "passagem_plantao") {
-                        summary = `Plantão: ${r.data.estado_humor}`;
+                        summary = `Plantao: ${r.data?.estado_humor}`;
                       } else {
-                        summary = `Ocorrência: ${r.data.tipo_ocorrencia}`;
+                        summary = `Ocorrencia: ${r.data?.tipo_ocorrencia}`;
                       }
-                      const cgName = profiles?.find((p) => p.id === r.caregiver_id)?.full_name || "Cuidador";
+                      const cgName = profileName(r.caregiver_id);
                       return (
                         <div key={r.id} className="text-xs flex flex-col border-l-2 border-primary/40 pl-2 py-0.5">
                           <div className="flex justify-between gap-1 text-muted-foreground">
@@ -323,7 +216,7 @@ function SupervisorDashboard() {
                   </div>
                 ) : (
                   <p className="text-xs font-medium text-destructive bg-destructive/10 rounded-lg p-2 flex items-center gap-1">
-                    ⚠️ Sem cuidados nas últimas 12h
+                    Sem cuidados nas ultimas 12h
                   </p>
                 )}
                 
@@ -343,20 +236,18 @@ function SupervisorDashboard() {
         </div>
       </section>
 
-
-
       <section>
-        <h2 className="mb-3 font-display text-lg font-bold">Atividade em tempo real</h2>
+        <h2 className="mb-3 font-display text-lg font-bold">Atividade recente</h2>
         {records && records.length > 0 ? (
           <div className="space-y-2">
-            {records.map((r: CareRecord) => (
+            {records.map((r: any) => (
               <RecordCard key={r.id} record={r} elderName={elderName(r.elder_id)} caregiverName={profileName(r.caregiver_id)} />
             ))}
           </div>
         ) : (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              Nenhum registro ainda. Cadastre idosos e cuidadores para começar.
+              Nenhum registro ainda. Cadastre idosos e cuidadores para comecar.
             </CardContent>
           </Card>
         )}
@@ -377,54 +268,38 @@ function StatCard({ icon: Icon, label, value, highlight }: { icon: typeof Users;
   );
 }
 
-/* ---------------- PASSAGENS DE PLANTÃO (Supervisor) ---------------- */
-
-async function fetchAllHandovers() {
-  let remote: any[] = [];
-  try {
-    const { data, error } = await supabase
-      .from("shift_handovers")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (!error && data) remote = data;
-  } catch (e) {
-    console.warn("Could not fetch remote shift handovers:", e);
-  }
-  const localStr = typeof window !== "undefined" ? localStorage.getItem("local-shift-handovers") : null;
-  const local = localStr ? JSON.parse(localStr) : [];
-  const merged = [...remote];
-  local.forEach((l: any) => {
-    if (!merged.some((m) => m.id === l.id)) merged.push(l);
-  });
-  return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-}
-
 function HandoversTab() {
+  const { userId, userName } = useRole();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  const { data: handovers, isLoading } = useQuery({
-    queryKey: ["shift-handovers-all"],
-    queryFn: fetchAllHandovers,
+  const { data: records } = useQuery({
+    queryKey: ["all-records"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL()}/records`);
+      const data = await res.json();
+      return data.filter((r: any) => r.record_type === "passagem_plantao").sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    },
   });
 
   const { data: elders } = useQuery({
     queryKey: ["elders"],
     queryFn: async () => {
-      const { data } = await supabase.from("elders").select("id, full_name");
-      return data ?? [];
-    },
-  });
-  const { data: profiles } = useQuery({
-    queryKey: ["profiles"],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name");
-      return data ?? [];
+      const res = await fetch(`${API_URL()}/elders`);
+      return res.json();
     },
   });
 
-  const filtered = (handovers ?? []).filter((h: any) => {
-    const t = new Date(h.created_at).getTime();
+  const { data: caregivers } = useQuery({
+    queryKey: ["caregivers"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL()}/caregivers`);
+      return res.json();
+    },
+  });
+
+  const filtered = (records ?? []).filter((r: any) => {
+    const t = new Date(r.created_at).getTime();
     if (from) {
       const f = new Date(from + "T00:00:00").getTime();
       if (t < f) return false;
@@ -436,12 +311,114 @@ function HandoversTab() {
     return true;
   });
 
+  const handleDownload = () => {
+    if (filtered.length === 0) {
+      toast.error("Nenhum registro para baixar.");
+      return;
+    }
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const marginX = 40;
+
+    const nameOf = (id: string) =>
+      id === userId
+        ? userName || "Supervisor"
+        : caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+
+    doc.setFillColor(34, 102, 68);
+    doc.rect(0, 0, pageWidth, 90, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("CuidarBem", marginX, 40);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text("Relatório de Passagens de Plantão", marginX, 58);
+    doc.setFontSize(9);
+    doc.text(`Emitido em ${new Date().toLocaleString("pt-BR")}`, marginX, 76);
+
+    let y = 110;
+    doc.setTextColor(20, 20, 20);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    if (from || to) {
+      const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
+      const label = from && to
+        ? `Período: ${fmt(from)} a ${fmt(to)}`
+        : from
+          ? `A partir de ${fmt(from)}`
+          : `Até ${fmt(to!)}`;
+      doc.text(label, marginX, y);
+    } else {
+      doc.text("Todos os registros", marginX, y);
+    }
+    y += 14;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(90, 90, 90);
+    doc.text(`Total: ${filtered.length} passagem(ns) de plantão`, marginX, y);
+    y += 20;
+
+    const bodyRows = filtered.map((r: any) => {
+      const elder = elders?.find((e: any) => e.id === r.elder_id);
+      const d = new Date(r.created_at);
+      return [
+        elder?.full_name || "—",
+        nameOf(r.caregiver_id),
+        d.toLocaleDateString("pt-BR"),
+        d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        r.data?.estado_humor || "—",
+        r.data?.resumo_plantao || "—",
+        r.data?.intercorrencias && r.data.intercorrencias !== "nenhuma"
+          ? r.data.intercorrencias
+          : "Nenhuma",
+        r.data?.notes || "",
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Idoso", "Cuidador", "Data", "Hora", "Humor", "Resumo", "Intercorrências", "Nota"]],
+      body: bodyRows,
+      styles: { fontSize: 8, cellPadding: 4, valign: "top", overflow: "linebreak" },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        1: { cellWidth: 70 },
+        4: { cellWidth: 50 },
+        6: { cellWidth: 65 },
+      },
+      headStyles: { fillColor: [34, 102, 68], textColor: 255, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [245, 250, 247] },
+      margin: { left: marginX, right: marginX },
+      didDrawPage: (data: any) => {
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        const pageH = doc.internal.pageSize.getHeight();
+        doc.text(
+          `CuidarBem — Página ${doc.getNumberOfPages()}`,
+          marginX,
+          pageH - 20,
+        );
+        doc.text(
+          `Passagens de Plantão`,
+          pageWidth - marginX,
+          pageH - 20,
+          { align: "right" },
+        );
+      },
+    });
+
+    const safeName = `passagens_plantao${from ? "_" + from : ""}${to ? "_" + to : ""}`;
+    doc.save(`${safeName}.pdf`);
+    toast.success("Relatório PDF baixado!");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="font-display text-2xl font-bold flex items-center gap-2">
           <ClipboardList className="h-6 w-6 text-primary" />
-          Passagens de Plantão
+          Passagens de Plantao
         </h1>
         <Badge variant="secondary">Exclusivo Supervisor</Badge>
       </div>
@@ -453,7 +430,7 @@ function HandoversTab() {
             <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="to">Até</Label>
+            <Label htmlFor="to">Ate</Label>
             <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" />
           </div>
           {(from || to) && (
@@ -462,26 +439,29 @@ function HandoversTab() {
             </Button>
           )}
           <span className="text-xs text-muted-foreground ml-auto">
-            {filtered.length} relatório{filtered.length === 1 ? "" : "s"}
+            {filtered.length} registro{filtered.length === 1 ? "" : "s"}
           </span>
+          {filtered.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleDownload}>
+              <FileDown className="h-4 w-4" /> Baixar PDF
+            </Button>
+          )}
         </CardContent>
       </Card>
 
-      {isLoading ? (
-        <Skeleton className="h-40 w-full" />
-      ) : filtered.length === 0 ? (
+      {filtered.length === 0 ? (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground text-sm">
-            Nenhuma passagem de plantão no período selecionado.
+            Nenhuma passagem de plantao no periodo selecionado.
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((sh: any) => {
-            const elder = elders?.find((e: any) => e.id === sh.elder_id);
-            const cg = profiles?.find((p: any) => p.id === sh.caregiver_id);
+          {filtered.map((r: any) => {
+            const elder = elders?.find((e: any) => e.id === r.elder_id);
+            const cg = caregivers?.find((c: any) => c.id === r.caregiver_id);
             return (
-              <div key={sh.id} className="p-4 rounded-xl border bg-background/40 space-y-2">
+              <div key={r.id} className="p-4 rounded-xl border bg-background/40 space-y-2">
                 <div className="flex justify-between items-start gap-2 border-b pb-2">
                   <div>
                     <span className="text-[10px] text-muted-foreground block">Idoso</span>
@@ -489,7 +469,7 @@ function HandoversTab() {
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] text-muted-foreground block">Data e Hora</span>
-                    <span className="font-medium text-[11px] text-foreground">{formatDateTime(sh.created_at)}</span>
+                    <span className="font-medium text-[11px] text-foreground">{formatDateTime(r.created_at)}</span>
                   </div>
                 </div>
                 <div className="text-xs space-y-1">
@@ -497,17 +477,17 @@ function HandoversTab() {
                     Cuidador: <strong className="text-foreground">{cg?.full_name || "Cuidador"}</strong>
                   </p>
                   <p className="text-muted-foreground">
-                    Humor: <Badge variant="secondary" className="text-[9px] py-0 px-1">{sh.estado_humor}</Badge>
+                    Humor: <Badge variant="secondary" className="text-[9px] py-0 px-1">{r.data?.estado_humor}</Badge>
                   </p>
                   <p className="text-muted-foreground mt-2 bg-secondary/20 p-2 rounded border italic">
-                    "{sh.resumo_plantao}"
+                    "{r.data?.resumo_plantao}"
                   </p>
-                  {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
+                  {r.data?.intercorrencias && r.data.intercorrencias !== "nenhuma" && (
                     <p className="text-destructive font-semibold mt-1">
-                      ⚠️ Intercorrências: {sh.intercorrencias}
+                      Intercorrencias: {r.data.intercorrencias}
                     </p>
                   )}
-                  {sh.notes && <p className="text-muted-foreground mt-1">Nota: {sh.notes}</p>}
+                  {r.data?.notes && <p className="text-muted-foreground mt-1">Nota: {r.data.notes}</p>}
                 </div>
               </div>
             );
@@ -518,158 +498,62 @@ function HandoversTab() {
   );
 }
 
-
-
 function CaregiverDashboard({ userId }: { userId: string }) {
-  const { role } = useRole();
+  const { userName } = useRole();
   const { data: assignments } = useQuery({
-    queryKey: ["my-assignments", userId, role],
+    queryKey: ["my-assignments", userId],
     queryFn: async () => {
-      if (role === "supervisor") {
-        let remoteElders: any[] = [];
-        try {
-          const { data, error } = await supabase.from("elders").select("*").eq("active", true).order("full_name");
-          if (!error && data) remoteElders = data;
-        } catch (e) {
-          console.warn(e);
-        }
-
-        const localEldersStr = typeof window !== "undefined" ? localStorage.getItem("local-elders") : null;
-        const localElders = localEldersStr ? JSON.parse(localEldersStr) : [];
-
-        const merged = [...remoteElders];
-        localElders.forEach((local: any) => {
-          if (!merged.some((m) => m.id === local.id)) {
-            merged.push(local);
-          }
-        });
-
-        return merged.map((e) => ({
-          elder_id: e.id,
-          elders: e,
-        }));
-      }
-
-      let remoteAssignments: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from("assignments")
-          .select("elder_id, elders(*)")
-          .eq("caregiver_id", userId);
-        if (!error && data) remoteAssignments = data;
-      } catch (e) {
-        console.warn("Failed to fetch caregiver assignments:", e);
-      }
-
-      const localAssignStr = typeof window !== "undefined" ? localStorage.getItem("local-assignments") : null;
-      const localAssigns = localAssignStr ? JSON.parse(localAssignStr) : [];
-      const localMyAssigns = localAssigns.filter((a: any) => a.caregiver_id === userId);
-
-      const localEldersStr = typeof window !== "undefined" ? localStorage.getItem("local-elders") : null;
-      const localElders = localEldersStr ? JSON.parse(localEldersStr) : [];
-
-      const merged = [...remoteAssignments];
-      localMyAssigns.forEach((la: any) => {
-        if (!merged.some((m) => m.elder_id === la.elder_id)) {
-          const elder = localElders.find((e: any) => e.id === la.elder_id);
-          if (elder) {
-            merged.push({
-              elder_id: la.elder_id,
-              elders: elder,
-            });
-          }
-        }
-      });
-      return merged;
+      const res = await fetch(`${API_URL()}/assignments`);
+      const all = await res.json();
+      return all.filter((a: any) => a.caregiver_id === userId);
     },
   });
 
-  const { data: profiles } = useQuery({
-    queryKey: ["profiles"],
+  const { data: elders } = useQuery({
+    queryKey: ["elders"],
     queryFn: async () => {
-      let remoteProfiles: any[] = [];
-      try {
-        const { data, error } = await supabase.from("profiles").select("*");
-        if (!error && data) remoteProfiles = data;
-      } catch (e) {
-        console.warn(e);
-      }
-      return remoteProfiles;
+      const res = await fetch(`${API_URL()}/elders`);
+      return res.json();
     },
   });
 
-  const assignedElderIds = assignments?.map((a) => a.elder_id) || [];
-
-  const { data: realTimeObservations } = useQuery({
-    queryKey: ["realtime-observations", assignedElderIds],
-    enabled: assignedElderIds.length > 0,
+  const { data: caregivers } = useQuery({
+    queryKey: ["caregivers"],
     queryFn: async () => {
-      let remoteRecords: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from("care_records")
-          .select("*")
-          .in("elder_id", assignedElderIds)
-          .order("created_at", { ascending: false })
-          .limit(20);
-        if (!error && data) remoteRecords = data;
-      } catch (e) {
-        console.warn("Failed to fetch realtime observations:", e);
-      }
-
-      const localRecordsStr = typeof window !== "undefined" ? localStorage.getItem("local-care-records") : null;
-      const localRecords = localRecordsStr ? JSON.parse(localRecordsStr) : [];
-      const localAssigned = localRecords.filter((r: any) => assignedElderIds.includes(r.elder_id));
-
-      const merged = [...remoteRecords];
-      localAssigned.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const res = await fetch(`${API_URL()}/caregivers`);
+      return res.json();
     },
   });
 
-  const { data: myRecords } = useQuery({
+  const { data: records } = useQuery({
     queryKey: ["my-records", userId],
     queryFn: async () => {
-      let remoteRecords: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from("care_records")
-          .select("*")
-          .eq("caregiver_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(20);
-        if (!error && data) remoteRecords = data;
-      } catch (e) {
-        console.warn(e);
-      }
-
-      const localRecordsStr = typeof window !== "undefined" ? localStorage.getItem("local-care-records") : null;
-      const localRecords = localRecordsStr ? JSON.parse(localRecordsStr) : [];
-      const userLocalRecords = localRecords.filter((r: any) => r.caregiver_id === userId);
-
-      const merged = [...remoteRecords];
-      userLocalRecords.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const res = await fetch(`${API_URL()}/records`);
+      const all = await res.json();
+      return all.filter((r: any) => r.caregiver_id === userId).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
   });
 
-  const { data: myHandovers } = useQuery({
-    queryKey: ["my-handovers", userId],
+  const assignedElderIds = assignments?.map((a: any) => a.elder_id) || [];
+
+  const { data: recentForMyElders } = useQuery({
+    queryKey: ["elders-records", assignedElderIds],
+    enabled: assignedElderIds.length > 0,
     queryFn: async () => {
-      const all = await fetchAllHandovers();
-      return all.filter((h: any) => h.caregiver_id === userId);
+      const res = await fetch(`${API_URL()}/records`);
+      const all = await res.json();
+      return all
+        .filter((r: any) => assignedElderIds.includes(r.elder_id))
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 20);
     },
   });
 
-
+  const profileName = (id: string) => {
+    if (id === userId) return userName || "Supervisor";
+    return caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+  };
+  const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Idoso";
 
   return (
     <div className="space-y-6">
@@ -686,8 +570,8 @@ function CaregiverDashboard({ userId }: { userId: string }) {
         <h2 className="mb-3 font-display text-lg font-bold">Idosos sob meus cuidados</h2>
         {assignments && assignments.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {assignments.map((a) => {
-              const elder = a.elders;
+            {assignments.map((a: any) => {
+              const elder = elders?.find((e: any) => e.id === a.elder_id);
               if (!elder) return null;
               return (
                 <Card key={a.elder_id} className="transition-shadow hover:shadow-md flex flex-col justify-between">
@@ -700,7 +584,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0 text-sm text-muted-foreground">
-                      {elder.medical_notes ? elder.medical_notes.slice(0, 80) : "Ver histórico completo"}
+                      {elder.medical_notes ? elder.medical_notes.slice(0, 80) : "Ver historico completo"}
                     </CardContent>
                   </div>
                   <div className="p-4 pt-0 flex justify-end">
@@ -717,7 +601,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
         ) : (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              Nenhum idoso vinculado ainda. Peça ao seu supervisor para vincular você.
+              Nenhum idoso vinculado ainda. Peca ao seu supervisor para vincular voce.
             </CardContent>
           </Card>
         )}
@@ -726,85 +610,40 @@ function CaregiverDashboard({ userId }: { userId: string }) {
       <section className="bg-card border rounded-2xl p-5 shadow-sm">
         <h2 className="mb-3 font-display text-lg font-bold flex items-center gap-2">
           <HeartPulse className="h-5 w-5 text-primary animate-pulse" />
-          Observações em tempo real
+          Observacoes em tempo real
         </h2>
-        {realTimeObservations && realTimeObservations.length > 0 ? (
+        {recentForMyElders && recentForMyElders.length > 0 ? (
           <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-            {realTimeObservations.map((r) => {
-              const elder = assignments?.find((a) => a.elder_id === r.elder_id)?.elders;
-              const elderNameStr = elder?.full_name || "Idoso";
-              const caregiverNameStr = profiles?.find((p) => p.id === r.caregiver_id)?.full_name || "Cuidador";
-              return (
-                <RecordCard
-                  key={r.id}
-                  record={r}
-                  elderName={elderNameStr}
-                  caregiverName={caregiverNameStr}
-                  showSelfie={false}
-                />
-              );
-            })}
+            {recentForMyElders.map((r: any) => (
+              <RecordCard
+                key={r.id}
+                record={r}
+                elderName={elderName(r.elder_id)}
+                caregiverName={profileName(r.caregiver_id)}
+                showSelfie={false}
+              />
+            ))}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground italic bg-secondary/35 p-3 rounded-lg text-center">
-            Nenhuma observação ou cuidado registrado em tempo real para os seus idosos.
+            Nenhuma observacao ou cuidado registrado em tempo real para os seus idosos.
           </p>
         )}
       </section>
 
-
-
       <section>
-        <h2 className="mb-3 font-display text-lg font-bold">Meus últimos registros</h2>
+        <h2 className="mb-3 font-display text-lg font-bold">Meus ultimos registros</h2>
         <div className="space-y-2">
-          {myRecords?.map((r) => <RecordCard key={r.id} record={r} showSelfie={false} />)}
-          {(!myRecords || myRecords.length === 0) && (
+          {records?.map((r: any) => <RecordCard key={r.id} record={r} showSelfie={false} />)}
+          {(!records || records.length === 0) && (
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
-                Você ainda não fez registros hoje.
+                Voce ainda nao fez registros hoje.
               </CardContent>
             </Card>
           )}
         </div>
       </section>
-
-      <section>
-        <h2 className="mb-3 font-display text-lg font-bold flex items-center gap-2">
-          <ClipboardList className="h-5 w-5 text-primary" />
-          Minhas passagens de plantão
-        </h2>
-        {myHandovers && myHandovers.length > 0 ? (
-          <div className="space-y-2">
-            {myHandovers.map((sh: any) => (
-              <Card key={sh.id}>
-                <CardContent className="p-4 space-y-1.5">
-                  <div className="flex justify-between items-start gap-2 border-b pb-2">
-                    <span className="font-semibold text-sm">
-                      {assignments?.find((a) => a.elder_id === sh.elder_id)?.elders?.full_name || "Idoso"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{formatDateTime(sh.created_at)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Humor: <Badge variant="secondary" className="text-[10px] py-0 px-1">{sh.estado_humor}</Badge>
-                  </p>
-                  <p className="text-xs italic bg-secondary/20 p-2 rounded border">"{sh.resumo_plantao}"</p>
-                  {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
-                    <p className="text-xs text-destructive font-semibold">⚠️ {sh.intercorrencias}</p>
-                  )}
-                  {sh.notes && <p className="text-xs text-muted-foreground">Nota: {sh.notes}</p>}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="p-6 text-center text-muted-foreground text-sm">
-              Nenhuma passagem de plantão registrada ainda.
-            </CardContent>
-          </Card>
-        )}
-      </section>
     </div>
   );
 }
-
