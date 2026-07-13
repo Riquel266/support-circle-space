@@ -767,6 +767,43 @@ function CaregiverDashboard({ userId }: { userId: string }) {
           )}
         </div>
       </section>
+
+      <section>
+        <h2 className="mb-3 font-display text-lg font-bold flex items-center gap-2">
+          <ClipboardList className="h-5 w-5 text-primary" />
+          Minhas passagens de plantão
+        </h2>
+        {myHandovers && myHandovers.length > 0 ? (
+          <div className="space-y-2">
+            {myHandovers.map((sh: any) => (
+              <Card key={sh.id}>
+                <CardContent className="p-4 space-y-1.5">
+                  <div className="flex justify-between items-start gap-2 border-b pb-2">
+                    <span className="font-semibold text-sm">
+                      {assignments?.find((a) => a.elder_id === sh.elder_id)?.elders?.full_name || "Idoso"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{formatDateTime(sh.created_at)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Humor: <Badge variant="secondary" className="text-[10px] py-0 px-1">{sh.estado_humor}</Badge>
+                  </p>
+                  <p className="text-xs italic bg-secondary/20 p-2 rounded border">"{sh.resumo_plantao}"</p>
+                  {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
+                    <p className="text-xs text-destructive font-semibold">⚠️ {sh.intercorrencias}</p>
+                  )}
+                  {sh.notes && <p className="text-xs text-muted-foreground">Nota: {sh.notes}</p>}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground text-sm">
+              Nenhuma passagem de plantão registrada ainda.
+            </CardContent>
+          </Card>
+        )}
+      </section>
     </div>
   );
 }
