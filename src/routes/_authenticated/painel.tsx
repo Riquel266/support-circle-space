@@ -377,7 +377,148 @@ function StatCard({ icon: Icon, label, value, highlight }: { icon: typeof Users;
   );
 }
 
-/* ---------------- CUIDADOR ---------------- */
+/* ---------------- PASSAGENS DE PLANTÃO (Supervisor) ---------------- */
+
+async function fetchAllHandovers() {
+  let remote: any[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("shift_handovers")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (!error && data) remote = data;
+  } catch (e) {
+    console.warn("Could not fetch remote shift handovers:", e);
+  }
+  const localStr = typeof window !== "undefined" ? localStorage.getItem("local-shift-handovers") : null;
+  const local = localStr ? JSON.parse(localStr) : [];
+  const merged = [...remote];
+  local.forEach((l: any) => {
+    if (!merged.some((m) => m.id === l.id)) merged.push(l);
+  });
+  return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+function HandoversTab() {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const { data: handovers, isLoading } = useQuery({
+    queryKey: ["shift-handovers-all"],
+    queryFn: fetchAllHandovers,
+  });
+
+  const { data: elders } = useQuery({
+    queryKey: ["elders"],
+    queryFn: async () => {
+      const { data } = await supabase.from("elders").select("id, full_name");
+      return data ?? [];
+    },
+  });
+  const { data: profiles } = useQuery({
+    queryKey: ["profiles"],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("id, full_name");
+      return data ?? [];
+    },
+  });
+
+  const filtered = (handovers ?? []).filter((h: any) => {
+    const t = new Date(h.created_at).getTime();
+    if (from) {
+      const f = new Date(from + "T00:00:00").getTime();
+      if (t < f) return false;
+    }
+    if (to) {
+      const tEnd = new Date(to + "T23:59:59").getTime();
+      if (t > tEnd) return false;
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="font-display text-2xl font-bold flex items-center gap-2">
+          <ClipboardList className="h-6 w-6 text-primary" />
+          Passagens de Plantão
+        </h1>
+        <Badge variant="secondary">Exclusivo Supervisor</Badge>
+      </div>
+
+      <Card>
+        <CardContent className="p-4 flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="from">De</Label>
+            <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="to">Até</Label>
+            <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" />
+          </div>
+          {(from || to) && (
+            <Button variant="ghost" size="sm" onClick={() => { setFrom(""); setTo(""); }}>
+              Limpar filtro
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground ml-auto">
+            {filtered.length} relatório{filtered.length === 1 ? "" : "s"}
+          </span>
+        </CardContent>
+      </Card>
+
+      {isLoading ? (
+        <Skeleton className="h-40 w-full" />
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground text-sm">
+            Nenhuma passagem de plantão no período selecionado.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((sh: any) => {
+            const elder = elders?.find((e: any) => e.id === sh.elder_id);
+            const cg = profiles?.find((p: any) => p.id === sh.caregiver_id);
+            return (
+              <div key={sh.id} className="p-4 rounded-xl border bg-background/40 space-y-2">
+                <div className="flex justify-between items-start gap-2 border-b pb-2">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">Idoso</span>
+                    <span className="font-semibold text-xs text-foreground block">{elder?.full_name || "Idoso"}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-muted-foreground block">Data e Hora</span>
+                    <span className="font-medium text-[11px] text-foreground">{formatDateTime(sh.created_at)}</span>
+                  </div>
+                </div>
+                <div className="text-xs space-y-1">
+                  <p className="text-muted-foreground">
+                    Cuidador: <strong className="text-foreground">{cg?.full_name || "Cuidador"}</strong>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Humor: <Badge variant="secondary" className="text-[9px] py-0 px-1">{sh.estado_humor}</Badge>
+                  </p>
+                  <p className="text-muted-foreground mt-2 bg-secondary/20 p-2 rounded border italic">
+                    "{sh.resumo_plantao}"
+                  </p>
+                  {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
+                    <p className="text-destructive font-semibold mt-1">
+                      ⚠️ Intercorrências: {sh.intercorrencias}
+                    </p>
+                  )}
+                  {sh.notes && <p className="text-muted-foreground mt-1">Nota: {sh.notes}</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 
 function CaregiverDashboard({ userId }: { userId: string }) {
   const { role } = useRole();
