@@ -208,11 +208,10 @@ function SupervisorDashboard() {
 
   const { data: shiftHandovers } = useQuery({
     queryKey: ["shift-handovers"],
-    enabled: role === "supervisor",
     queryFn: async () => {
       let remoteHandovers: any[] = [];
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from("shift_handovers")
           .select("*")
           .order("created_at", { ascending: false });
