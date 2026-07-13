@@ -14,220 +14,16 @@ export type Database = {
   }
   public: {
     Tables: {
-      alerts: {
-        Row: {
-          care_record_id: string | null
-          created_at: string
-          elder_id: string
-          id: string
-          message: string
-          resolved: boolean
-          severity: Database["public"]["Enums"]["alert_severity"]
-        }
-        Insert: {
-          care_record_id?: string | null
-          created_at?: string
-          elder_id: string
-          id?: string
-          message: string
-          resolved?: boolean
-          severity?: Database["public"]["Enums"]["alert_severity"]
-        }
-        Update: {
-          care_record_id?: string | null
-          created_at?: string
-          elder_id?: string
-          id?: string
-          message?: string
-          resolved?: boolean
-          severity?: Database["public"]["Enums"]["alert_severity"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "alerts_care_record_id_fkey"
-            columns: ["care_record_id"]
-            isOneToOne: false
-            referencedRelation: "care_records"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "alerts_elder_id_fkey"
-            columns: ["elder_id"]
-            isOneToOne: false
-            referencedRelation: "elders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      assignments: {
-        Row: {
-          caregiver_id: string
-          created_at: string
-          elder_id: string
-          id: string
-        }
-        Insert: {
-          caregiver_id: string
-          created_at?: string
-          elder_id: string
-          id?: string
-        }
-        Update: {
-          caregiver_id?: string
-          created_at?: string
-          elder_id?: string
-          id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "assignments_elder_id_fkey"
-            columns: ["elder_id"]
-            isOneToOne: false
-            referencedRelation: "elders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      care_records: {
-        Row: {
-          caregiver_id: string
-          created_at: string
-          data: Json
-          elder_id: string
-          id: string
-          notes: string | null
-          record_type: Database["public"]["Enums"]["record_type"]
-          selfie_path: string
-        }
-        Insert: {
-          caregiver_id: string
-          created_at?: string
-          data?: Json
-          elder_id: string
-          id?: string
-          notes?: string | null
-          record_type: Database["public"]["Enums"]["record_type"]
-          selfie_path: string
-        }
-        Update: {
-          caregiver_id?: string
-          created_at?: string
-          data?: Json
-          elder_id?: string
-          id?: string
-          notes?: string | null
-          record_type?: Database["public"]["Enums"]["record_type"]
-          selfie_path?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "care_records_elder_id_fkey"
-            columns: ["elder_id"]
-            isOneToOne: false
-            referencedRelation: "elders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      elders: {
-        Row: {
-          active: boolean
-          birth_date: string | null
-          created_at: string
-          created_by: string
-          full_name: string
-          id: string
-          medical_notes: string | null
-          photo_url: string | null
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          birth_date?: string | null
-          created_at?: string
-          created_by: string
-          full_name: string
-          id?: string
-          medical_notes?: string | null
-          photo_url?: string | null
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          birth_date?: string | null
-          created_at?: string
-          created_by?: string
-          full_name?: string
-          id?: string
-          medical_notes?: string | null
-          photo_url?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      profiles: {
-        Row: {
-          created_at: string
-          full_name: string
-          id: string
-          phone: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          full_name?: string
-          id: string
-          phone?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          full_name?: string
-          id?: string
-          phone?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      user_roles: {
-        Row: {
-          id: string
-          role: Database["public"]["Enums"]["app_role"]
-          user_id: string
-        }
-        Insert: {
-          id?: string
-          role: Database["public"]["Enums"]["app_role"]
-          user_id: string
-        }
-        Update: {
-          id?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id?: string
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
-      is_assigned: {
-        Args: { _elder_id: string; _user_id: string }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
-      alert_severity: "info" | "atencao" | "critico"
-      app_role: "supervisor" | "cuidador"
-      record_type: "sinais_vitais" | "medicacao" | "alimentacao" | "ocorrencia"
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -354,10 +150,6 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {
-      alert_severity: ["info", "atencao", "critico"],
-      app_role: ["supervisor", "cuidador"],
-      record_type: ["sinais_vitais", "medicacao", "alimentacao", "ocorrencia"],
-    },
+    Enums: {},
   },
 } as const
