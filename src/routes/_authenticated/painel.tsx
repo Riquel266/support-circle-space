@@ -352,7 +352,7 @@ function SupervisorDashboard() {
                 )}
                 
                 <div className="pt-2 border-t border-dashed mt-2 flex justify-end">
-                  <Button size="xs" asChild variant="ghost" className="gap-1 text-xs text-primary hover:text-primary-foreground hover:bg-primary h-7 px-2">
+                  <Button size="sm" asChild variant="ghost" className="gap-1 text-xs text-primary hover:text-primary-foreground hover:bg-primary h-7 px-2">
                     <Link to="/registrar" search={{ elderId: elder.id }}>
                       <ClipboardPlus className="h-3.5 w-3.5" /> Registrar Cuidado
                     </Link>
