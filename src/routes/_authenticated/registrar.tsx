@@ -225,7 +225,7 @@ function RegistrarPage() {
                 .from("assinaturas")
                 .upload(path, selfie, { contentType: "image/jpeg" });
             }
-            await supabase.from("care_records").insert({
+            await (supabase as any).from("care_records").insert({
               id: newRecordId,
               elder_id: elderId,
               caregiver_id: userId || "0e7874c3-a937-4158-a0ab-949991be81b9",
