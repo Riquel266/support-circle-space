@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SEVERITY_LABELS, formatDateTime, type Alert, type CareRecord } from "@/lib/care";
 
 export const Route = createFileRoute("/_authenticated/painel")({
@@ -19,7 +21,20 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 function PainelPage() {
   const { role, userId, isLoading } = useRole();
-  const [activeTab, setActiveTab] = useState<"supervisor" | "cuidador">("supervisor");
+  const [activeTab, setActiveTab] = useState<"supervisor" | "cuidador" | "passagens">("supervisor");
+
+  const tabBtn = (id: typeof activeTab, label: string) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`px-4 py-1.5 font-display text-sm font-semibold rounded-lg transition-all ${
+        activeTab === id
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <AppShell>
@@ -31,32 +46,17 @@ function PainelPage() {
       ) : role === "supervisor" ? (
         <div className="space-y-6">
           <div className="flex justify-center mb-6">
-            <div className="inline-flex rounded-xl bg-secondary p-1 border">
-              <button
-                onClick={() => setActiveTab("supervisor")}
-                className={`px-4 py-1.5 font-display text-sm font-semibold rounded-lg transition-all ${
-                  activeTab === "supervisor"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Painel Supervisor (Adm)
-              </button>
-              <button
-                onClick={() => setActiveTab("cuidador")}
-                className={`px-4 py-1.5 font-display text-sm font-semibold rounded-lg transition-all ${
-                  activeTab === "cuidador"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Visão do Cuidador
-              </button>
+            <div className="inline-flex flex-wrap justify-center rounded-xl bg-secondary p-1 border gap-1">
+              {tabBtn("supervisor", "Painel Supervisor (Adm)")}
+              {tabBtn("passagens", "Passagens de Plantão")}
+              {tabBtn("cuidador", "Visão do Cuidador")}
             </div>
           </div>
 
           {activeTab === "supervisor" ? (
             <SupervisorDashboard />
+          ) : activeTab === "passagens" ? (
+            <HandoversTab />
           ) : (
             <CaregiverDashboard userId={userId!} />
           )}
@@ -206,32 +206,8 @@ function SupervisorDashboard() {
     },
   });
 
-  const { data: shiftHandovers } = useQuery({
-    queryKey: ["shift-handovers"],
-    queryFn: async () => {
-      let remoteHandovers: any[] = [];
-      try {
-        const { data, error } = await (supabase as any)
-          .from("shift_handovers")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (!error && data) remoteHandovers = data;
-      } catch (e) {
-        console.warn("Could not fetch remote shift handovers:", e);
-      }
 
-      const localHandoversStr = typeof window !== "undefined" ? localStorage.getItem("local-shift-handovers") : null;
-      const localHandovers = localHandoversStr ? JSON.parse(localHandoversStr) : [];
 
-      const merged = [...remoteHandovers];
-      localHandovers.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    },
-  });
 
   const profileName = (id: string) => profiles?.find((p) => p.id === id)?.full_name || "Cuidador";
   const elderName = (id: string) => elders?.find((e) => e.id === id)?.full_name || "Idoso";
@@ -367,59 +343,7 @@ function SupervisorDashboard() {
         </div>
       </section>
 
-      <section className="bg-card border border-primary/20 rounded-2xl p-5 shadow-sm">
-        <h2 className="mb-4 font-display text-lg font-bold flex items-center gap-2 text-foreground">
-          <ClipboardList className="h-5 w-5 text-primary" />
-          Relatórios de Passagem de Plantão (Exclusivo Supervisor)
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-[400px] overflow-y-auto pr-1">
-          {shiftHandovers && shiftHandovers.length > 0 ? (
-            shiftHandovers.map((sh) => {
-              const elder = elders?.find((e) => e.id === sh.elder_id);
-              const cg = profiles?.find((p) => p.id === sh.caregiver_id);
-              return (
-                <div key={sh.id} className="p-4 rounded-xl border bg-background/40 hover:bg-background/80 transition-colors space-y-2 flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start gap-2 border-b pb-2 mb-2">
-                      <div>
-                        <span className="text-[10px] text-muted-foreground block">Idoso</span>
-                        <span className="font-semibold text-xs text-foreground truncate max-w-[120px] block">{elder?.full_name || "Idoso"}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-muted-foreground block">Data e Hora</span>
-                        <span className="font-medium text-[10px] text-foreground">{formatDateTime(sh.created_at)}</span>
-                      </div>
-                    </div>
-                    <div className="text-xs space-y-1">
-                      <p className="text-muted-foreground">
-                        Cuidador: <strong className="text-foreground">{cg?.full_name || "Cuidador"}</strong>
-                      </p>
-                      <p className="text-muted-foreground">
-                        Humor do idoso: <Badge variant="secondary" className="text-[9px] py-0 px-1">{sh.estado_humor}</Badge>
-                      </p>
-                      <p className="text-muted-foreground mt-2 bg-secondary/20 p-2 rounded border italic">
-                        “{sh.resumo_plantao}”
-                      </p>
-                      {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
-                        <p className="text-destructive font-semibold mt-1">
-                          ⚠️ Intercorrências: {sh.intercorrencias}
-                        </p>
-                      )}
-                      {sh.notes && (
-                        <p className="text-muted-foreground mt-1">
-                          Nota: {sh.notes}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4 col-span-full">Nenhum relatório de plantão recebido.</p>
-          )}
-        </div>
-      </section>
+
 
       <section>
         <h2 className="mb-3 font-display text-lg font-bold">Atividade em tempo real</h2>
@@ -453,7 +377,148 @@ function StatCard({ icon: Icon, label, value, highlight }: { icon: typeof Users;
   );
 }
 
-/* ---------------- CUIDADOR ---------------- */
+/* ---------------- PASSAGENS DE PLANTÃO (Supervisor) ---------------- */
+
+async function fetchAllHandovers() {
+  let remote: any[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("shift_handovers")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (!error && data) remote = data;
+  } catch (e) {
+    console.warn("Could not fetch remote shift handovers:", e);
+  }
+  const localStr = typeof window !== "undefined" ? localStorage.getItem("local-shift-handovers") : null;
+  const local = localStr ? JSON.parse(localStr) : [];
+  const merged = [...remote];
+  local.forEach((l: any) => {
+    if (!merged.some((m) => m.id === l.id)) merged.push(l);
+  });
+  return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+function HandoversTab() {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const { data: handovers, isLoading } = useQuery({
+    queryKey: ["shift-handovers-all"],
+    queryFn: fetchAllHandovers,
+  });
+
+  const { data: elders } = useQuery({
+    queryKey: ["elders"],
+    queryFn: async () => {
+      const { data } = await supabase.from("elders").select("id, full_name");
+      return data ?? [];
+    },
+  });
+  const { data: profiles } = useQuery({
+    queryKey: ["profiles"],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("id, full_name");
+      return data ?? [];
+    },
+  });
+
+  const filtered = (handovers ?? []).filter((h: any) => {
+    const t = new Date(h.created_at).getTime();
+    if (from) {
+      const f = new Date(from + "T00:00:00").getTime();
+      if (t < f) return false;
+    }
+    if (to) {
+      const tEnd = new Date(to + "T23:59:59").getTime();
+      if (t > tEnd) return false;
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="font-display text-2xl font-bold flex items-center gap-2">
+          <ClipboardList className="h-6 w-6 text-primary" />
+          Passagens de Plantão
+        </h1>
+        <Badge variant="secondary">Exclusivo Supervisor</Badge>
+      </div>
+
+      <Card>
+        <CardContent className="p-4 flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="from">De</Label>
+            <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="to">Até</Label>
+            <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" />
+          </div>
+          {(from || to) && (
+            <Button variant="ghost" size="sm" onClick={() => { setFrom(""); setTo(""); }}>
+              Limpar filtro
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground ml-auto">
+            {filtered.length} relatório{filtered.length === 1 ? "" : "s"}
+          </span>
+        </CardContent>
+      </Card>
+
+      {isLoading ? (
+        <Skeleton className="h-40 w-full" />
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground text-sm">
+            Nenhuma passagem de plantão no período selecionado.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((sh: any) => {
+            const elder = elders?.find((e: any) => e.id === sh.elder_id);
+            const cg = profiles?.find((p: any) => p.id === sh.caregiver_id);
+            return (
+              <div key={sh.id} className="p-4 rounded-xl border bg-background/40 space-y-2">
+                <div className="flex justify-between items-start gap-2 border-b pb-2">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">Idoso</span>
+                    <span className="font-semibold text-xs text-foreground block">{elder?.full_name || "Idoso"}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-muted-foreground block">Data e Hora</span>
+                    <span className="font-medium text-[11px] text-foreground">{formatDateTime(sh.created_at)}</span>
+                  </div>
+                </div>
+                <div className="text-xs space-y-1">
+                  <p className="text-muted-foreground">
+                    Cuidador: <strong className="text-foreground">{cg?.full_name || "Cuidador"}</strong>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Humor: <Badge variant="secondary" className="text-[9px] py-0 px-1">{sh.estado_humor}</Badge>
+                  </p>
+                  <p className="text-muted-foreground mt-2 bg-secondary/20 p-2 rounded border italic">
+                    "{sh.resumo_plantao}"
+                  </p>
+                  {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
+                    <p className="text-destructive font-semibold mt-1">
+                      ⚠️ Intercorrências: {sh.intercorrencias}
+                    </p>
+                  )}
+                  {sh.notes && <p className="text-muted-foreground mt-1">Nota: {sh.notes}</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 
 function CaregiverDashboard({ userId }: { userId: string }) {
   const { role } = useRole();
@@ -596,6 +661,16 @@ function CaregiverDashboard({ userId }: { userId: string }) {
     },
   });
 
+  const { data: myHandovers } = useQuery({
+    queryKey: ["my-handovers", userId],
+    queryFn: async () => {
+      const all = await fetchAllHandovers();
+      return all.filter((h: any) => h.caregiver_id === userId);
+    },
+  });
+
+
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -691,6 +766,43 @@ function CaregiverDashboard({ userId }: { userId: string }) {
             </Card>
           )}
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-display text-lg font-bold flex items-center gap-2">
+          <ClipboardList className="h-5 w-5 text-primary" />
+          Minhas passagens de plantão
+        </h2>
+        {myHandovers && myHandovers.length > 0 ? (
+          <div className="space-y-2">
+            {myHandovers.map((sh: any) => (
+              <Card key={sh.id}>
+                <CardContent className="p-4 space-y-1.5">
+                  <div className="flex justify-between items-start gap-2 border-b pb-2">
+                    <span className="font-semibold text-sm">
+                      {assignments?.find((a) => a.elder_id === sh.elder_id)?.elders?.full_name || "Idoso"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{formatDateTime(sh.created_at)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Humor: <Badge variant="secondary" className="text-[10px] py-0 px-1">{sh.estado_humor}</Badge>
+                  </p>
+                  <p className="text-xs italic bg-secondary/20 p-2 rounded border">"{sh.resumo_plantao}"</p>
+                  {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
+                    <p className="text-xs text-destructive font-semibold">⚠️ {sh.intercorrencias}</p>
+                  )}
+                  {sh.notes && <p className="text-xs text-muted-foreground">Nota: {sh.notes}</p>}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground text-sm">
+              Nenhuma passagem de plantão registrada ainda.
+            </CardContent>
+          </Card>
+        )}
       </section>
     </div>
   );
