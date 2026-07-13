@@ -16,6 +16,8 @@ const TYPE_ICONS: Record<RecordType, typeof Activity> = {
   medicacao: Pill,
   alimentacao: Utensils,
   ocorrencia: Activity,
+  passagem_plantao: ClipboardList,
+  diurese: Droplet,
 };
 
 interface RecordCardProps {
