@@ -365,59 +365,7 @@ function SupervisorDashboard() {
         </div>
       </section>
 
-      <section className="bg-card border border-primary/20 rounded-2xl p-5 shadow-sm">
-        <h2 className="mb-4 font-display text-lg font-bold flex items-center gap-2 text-foreground">
-          <ClipboardList className="h-5 w-5 text-primary" />
-          Relatórios de Passagem de Plantão (Exclusivo Supervisor)
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-[400px] overflow-y-auto pr-1">
-          {shiftHandovers && shiftHandovers.length > 0 ? (
-            shiftHandovers.map((sh) => {
-              const elder = elders?.find((e) => e.id === sh.elder_id);
-              const cg = profiles?.find((p) => p.id === sh.caregiver_id);
-              return (
-                <div key={sh.id} className="p-4 rounded-xl border bg-background/40 hover:bg-background/80 transition-colors space-y-2 flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start gap-2 border-b pb-2 mb-2">
-                      <div>
-                        <span className="text-[10px] text-muted-foreground block">Idoso</span>
-                        <span className="font-semibold text-xs text-foreground truncate max-w-[120px] block">{elder?.full_name || "Idoso"}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-muted-foreground block">Data e Hora</span>
-                        <span className="font-medium text-[10px] text-foreground">{formatDateTime(sh.created_at)}</span>
-                      </div>
-                    </div>
-                    <div className="text-xs space-y-1">
-                      <p className="text-muted-foreground">
-                        Cuidador: <strong className="text-foreground">{cg?.full_name || "Cuidador"}</strong>
-                      </p>
-                      <p className="text-muted-foreground">
-                        Humor do idoso: <Badge variant="secondary" className="text-[9px] py-0 px-1">{sh.estado_humor}</Badge>
-                      </p>
-                      <p className="text-muted-foreground mt-2 bg-secondary/20 p-2 rounded border italic">
-                        “{sh.resumo_plantao}”
-                      </p>
-                      {sh.intercorrencias && sh.intercorrencias !== "nenhuma" && (
-                        <p className="text-destructive font-semibold mt-1">
-                          ⚠️ Intercorrências: {sh.intercorrencias}
-                        </p>
-                      )}
-                      {sh.notes && (
-                        <p className="text-muted-foreground mt-1">
-                          Nota: {sh.notes}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4 col-span-full">Nenhum relatório de plantão recebido.</p>
-          )}
-        </div>
-      </section>
+
 
       <section>
         <h2 className="mb-3 font-display text-lg font-bold">Atividade em tempo real</h2>
