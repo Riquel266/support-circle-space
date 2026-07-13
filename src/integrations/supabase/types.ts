@@ -189,6 +189,50 @@ export type Database = {
         }
         Relationships: []
       }
+      shift_handovers: {
+        Row: {
+          caregiver_id: string
+          created_at: string
+          elder_id: string
+          estado_humor: string | null
+          id: string
+          intercorrencias: string | null
+          notes: string | null
+          resumo_plantao: string | null
+          selfie_path: string
+        }
+        Insert: {
+          caregiver_id: string
+          created_at?: string
+          elder_id: string
+          estado_humor?: string | null
+          id?: string
+          intercorrencias?: string | null
+          notes?: string | null
+          resumo_plantao?: string | null
+          selfie_path: string
+        }
+        Update: {
+          caregiver_id?: string
+          created_at?: string
+          elder_id?: string
+          estado_humor?: string | null
+          id?: string
+          intercorrencias?: string | null
+          notes?: string | null
+          resumo_plantao?: string | null
+          selfie_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_handovers_elder_id_fkey"
+            columns: ["elder_id"]
+            isOneToOne: false
+            referencedRelation: "elders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -227,7 +271,13 @@ export type Database = {
     Enums: {
       alert_severity: "info" | "atencao" | "critico"
       app_role: "supervisor" | "cuidador"
-      record_type: "sinais_vitais" | "medicacao" | "alimentacao" | "ocorrencia"
+      record_type:
+        | "sinais_vitais"
+        | "medicacao"
+        | "alimentacao"
+        | "ocorrencia"
+        | "passagem_plantao"
+        | "diurese"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -357,7 +407,14 @@ export const Constants = {
     Enums: {
       alert_severity: ["info", "atencao", "critico"],
       app_role: ["supervisor", "cuidador"],
-      record_type: ["sinais_vitais", "medicacao", "alimentacao", "ocorrencia"],
+      record_type: [
+        "sinais_vitais",
+        "medicacao",
+        "alimentacao",
+        "ocorrencia",
+        "passagem_plantao",
+        "diurese",
+      ],
     },
   },
 } as const
