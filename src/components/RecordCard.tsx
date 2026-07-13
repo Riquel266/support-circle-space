@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Pill, Utensils, HeartPulse } from "lucide-react";
+import { Activity, Pill, Utensils, HeartPulse, ClipboardList, Droplet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,8 @@ const TYPE_ICONS: Record<RecordType, typeof Activity> = {
   medicacao: Pill,
   alimentacao: Utensils,
   ocorrencia: Activity,
+  passagem_plantao: ClipboardList,
+  diurese: Droplet,
 };
 
 interface RecordCardProps {
