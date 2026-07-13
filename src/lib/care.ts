@@ -25,7 +25,7 @@ export const SEVERITY_LABELS: Record<string, string> = {
 export function formatRecordData(record: CareRecord): string[] {
   const d = (record.data ?? {}) as Record<string, string | number | boolean | null>;
   const lines: string[] = [];
-  switch (record.record_type) {
+  switch (record.record_type as RecordType) {
     case "sinais_vitais":
       if (d.pressao_sistolica && d.pressao_diastolica)
         lines.push(`Pressão: ${d.pressao_sistolica}/${d.pressao_diastolica} mmHg`);
