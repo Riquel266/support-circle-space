@@ -19,7 +19,20 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 function PainelPage() {
   const { role, userId, isLoading } = useRole();
-  const [activeTab, setActiveTab] = useState<"supervisor" | "cuidador">("supervisor");
+  const [activeTab, setActiveTab] = useState<"supervisor" | "cuidador" | "passagens">("supervisor");
+
+  const tabBtn = (id: typeof activeTab, label: string) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`px-4 py-1.5 font-display text-sm font-semibold rounded-lg transition-all ${
+        activeTab === id
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <AppShell>
@@ -31,32 +44,17 @@ function PainelPage() {
       ) : role === "supervisor" ? (
         <div className="space-y-6">
           <div className="flex justify-center mb-6">
-            <div className="inline-flex rounded-xl bg-secondary p-1 border">
-              <button
-                onClick={() => setActiveTab("supervisor")}
-                className={`px-4 py-1.5 font-display text-sm font-semibold rounded-lg transition-all ${
-                  activeTab === "supervisor"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Painel Supervisor (Adm)
-              </button>
-              <button
-                onClick={() => setActiveTab("cuidador")}
-                className={`px-4 py-1.5 font-display text-sm font-semibold rounded-lg transition-all ${
-                  activeTab === "cuidador"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Visão do Cuidador
-              </button>
+            <div className="inline-flex flex-wrap justify-center rounded-xl bg-secondary p-1 border gap-1">
+              {tabBtn("supervisor", "Painel Supervisor (Adm)")}
+              {tabBtn("passagens", "Passagens de Plantão")}
+              {tabBtn("cuidador", "Visão do Cuidador")}
             </div>
           </div>
 
           {activeTab === "supervisor" ? (
             <SupervisorDashboard />
+          ) : activeTab === "passagens" ? (
+            <HandoversTab />
           ) : (
             <CaregiverDashboard userId={userId!} />
           )}
