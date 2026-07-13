@@ -271,7 +271,13 @@ export type Database = {
     Enums: {
       alert_severity: "info" | "atencao" | "critico"
       app_role: "supervisor" | "cuidador"
-      record_type: "sinais_vitais" | "medicacao" | "alimentacao" | "ocorrencia"
+      record_type:
+        | "sinais_vitais"
+        | "medicacao"
+        | "alimentacao"
+        | "ocorrencia"
+        | "passagem_plantao"
+        | "diurese"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -401,7 +407,14 @@ export const Constants = {
     Enums: {
       alert_severity: ["info", "atencao", "critico"],
       app_role: ["supervisor", "cuidador"],
-      record_type: ["sinais_vitais", "medicacao", "alimentacao", "ocorrencia"],
+      record_type: [
+        "sinais_vitais",
+        "medicacao",
+        "alimentacao",
+        "ocorrencia",
+        "passagem_plantao",
+        "diurese",
+      ],
     },
   },
 } as const
