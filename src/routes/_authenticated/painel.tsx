@@ -204,32 +204,8 @@ function SupervisorDashboard() {
     },
   });
 
-  const { data: shiftHandovers } = useQuery({
-    queryKey: ["shift-handovers"],
-    queryFn: async () => {
-      let remoteHandovers: any[] = [];
-      try {
-        const { data, error } = await (supabase as any)
-          .from("shift_handovers")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (!error && data) remoteHandovers = data;
-      } catch (e) {
-        console.warn("Could not fetch remote shift handovers:", e);
-      }
 
-      const localHandoversStr = typeof window !== "undefined" ? localStorage.getItem("local-shift-handovers") : null;
-      const localHandovers = localHandoversStr ? JSON.parse(localHandoversStr) : [];
 
-      const merged = [...remoteHandovers];
-      localHandovers.forEach((local: any) => {
-        if (!merged.some((m) => m.id === local.id)) {
-          merged.push(local);
-        }
-      });
-      return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    },
-  });
 
   const profileName = (id: string) => profiles?.find((p) => p.id === id)?.full_name || "Cuidador";
   const elderName = (id: string) => elders?.find((e) => e.id === id)?.full_name || "Idoso";
