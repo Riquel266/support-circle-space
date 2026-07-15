@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { generateId } from "@/lib/utils";
 import { useRole } from "@/hooks/use-role";
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const API_URL = () => `http://${window.location.hostname}:3001/api`;
+const API_URL = () => `/api`;
 
 export const Route = createFileRoute("/_authenticated/registrar")({
   component: RegistrarPage,
@@ -39,6 +39,49 @@ function RegistrarPage() {
   const [selfie, setSelfie] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
   const [administrado, setAdministrado] = useState(true);
+  const [caregiverId, setCaregiverId] = useState("");
+
+  const { data: activeAttendance } = useQuery({
+    queryKey: ["active-attendance", userId],
+    enabled: !!userId && role === "cuidador",
+    queryFn: async () => {
+      const res = await fetch(`${API_URL()}/attendance?caregiver_id=${userId}`);
+      const data = await res.json();
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      return data.find((a: any) => {
+        const d = new Date(a.created_at);
+        const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return local === todayStr && a.caregiver_id === userId && !a.departure_time;
+      }) || null;
+    },
+  });
+
+  const { data: allElders = [] } = useQuery({
+    queryKey: ["elders-list"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL()}/elders`);
+      return res.json();
+    },
+  });
+
+  const { data: caregiversList = [] } = useQuery({
+    queryKey: ["caregivers-list"],
+    enabled: role === "supervisor",
+    queryFn: async () => {
+      const res = await fetch(`${API_URL()}/caregivers`);
+      return res.json();
+    },
+  });
+
+  const elderDisplayName = (id: string) =>
+    allElders?.find((e: any) => e.id === id)?.full_name || "";
+
+  useEffect(() => {
+    if (!elderId && activeAttendance?.elder_id) {
+      setElderId(activeAttendance.elder_id);
+    }
+  }, [activeAttendance, elderId]);
 
   const { data: assignments } = useQuery({
     queryKey: ["my-assignments", role, userId],
@@ -77,7 +120,11 @@ function RegistrarPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!elderId) {
-      toast.error("Selecione o idoso.");
+      toast.error("Selecione o paciente.");
+      return;
+    }
+    if (role === "supervisor" && !caregiverId) {
+      toast.error("Selecione o cuidador responsável.");
       return;
     }
     if (!selfie) {
@@ -201,7 +248,7 @@ function RegistrarPage() {
           const newRecord = {
             id: generateId(),
             elder_id: elderId,
-            caregiver_id: userId || "00000000-0000-0000-0000-000000000001",
+            caregiver_id: role === "supervisor" ? (caregiverId || userId || "00000000-0000-0000-0000-000000000001") : (userId || "00000000-0000-0000-0000-000000000001"),
             record_type: rec.record_type,
             data: rec.data,
             notes: rec.notes || null,
@@ -221,7 +268,7 @@ function RegistrarPage() {
         const handoverRecord = {
           id: generateId(),
           elder_id: elderId,
-          caregiver_id: userId || "00000000-0000-0000-0000-000000000001",
+          caregiver_id: role === "supervisor" ? (caregiverId || userId || "00000000-0000-0000-0000-000000000001") : (userId || "00000000-0000-0000-0000-000000000001"),
           record_type: "passagem_plantao",
           data: handoverToInsert,
           selfie_base64: selfieBase64,
@@ -249,7 +296,7 @@ function RegistrarPage() {
     <AppShell>
       <div className="mx-auto max-w-lg space-y-6">
         <h1 className="text-center font-display text-2xl font-bold">
-          Registrar Cuidados do Idoso
+          Registrar Cuidados do Paciente
         </h1>
         <p className="-mt-4 text-center text-sm text-muted-foreground">
           Preencha abaixo as acoes de cuidado realizadas neste periodo. Deixe em
@@ -257,32 +304,64 @@ function RegistrarPage() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <Card className="border-primary/20 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="font-display text-base">
-                1. Idoso
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>Selecione o Idoso</Label>
-                <Select value={elderId} onValueChange={setElderId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o idoso..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assignments?.map((a: any) =>
-                      a.elders ? (
-                        <SelectItem key={a.elder_id} value={a.elder_id}>
-                          {a.elders.full_name}
+          {role === "supervisor" ? (
+            <Card className="border-primary/20 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="font-display text-base">
+                  1. Paciente
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Selecione o Paciente</Label>
+                  <Select value={elderId} onValueChange={setElderId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o paciente..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assignments?.map((a: any) =>
+                        a.elders ? (
+                          <SelectItem key={a.elder_id} value={a.elder_id}>
+                            {a.elders.full_name}
+                          </SelectItem>
+                        ) : null,
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Registrando como cuidador</Label>
+                  <Select value={caregiverId} onValueChange={setCaregiverId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o cuidador..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {caregiversList?.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.full_name}
                         </SelectItem>
-                      ) : null,
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          ) : elderId ? (
+            <Card className="border-primary/20 shadow-sm">
+              <CardContent className="p-4 text-center">
+                <p className="text-sm text-muted-foreground">Paciente</p>
+                <p className="font-semibold text-lg">{elderDisplayName(elderId)}</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-destructive/30 shadow-sm">
+              <CardContent className="p-4 text-center">
+                <p className="text-sm text-destructive font-semibold">
+                  Nenhuma presença ativa registrada. Registre presença primeiro.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
@@ -588,7 +667,7 @@ function RegistrarPage() {
                   name="resumo_plantao"
                   maxLength={2000}
                   rows={4}
-                  placeholder="Ex.: O idoso passou o dia bem, tomou todos os remedios da manha, almocou toda a refeicao e realizou caminhada..."
+                  placeholder="Ex.: O paciente passou o dia bem, tomou todos os remedios da manha, almocou toda a refeicao e realizou caminhada..."
                 />
               </div>
               <div className="space-y-1.5">

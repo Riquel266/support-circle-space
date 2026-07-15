@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { calcAge } from "@/lib/care";
 
-const API_URL = () => `http://${window.location.hostname}:3001/api`;
+const API_URL = () => `/api`;
 
 export const Route = createFileRoute("/_authenticated/idosos/$elderId")({
   component: ElderDetailPage,
@@ -56,15 +56,28 @@ function CuidadorElderView() {
   });
 
   const todayRecords = (attendance as any[]).filter(
-    (a: any) => a.created_at.startsWith(todayStr) && a.caregiver_id === userId,
+    (a: any) => {
+      const d = new Date(a.created_at);
+      const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return local === todayStr && a.caregiver_id === userId;
+    },
   );
-  const activeRecord = todayRecords.find((a: any) => !a.departure_time) || null;
+  const activeRecordForThisElder = todayRecords.find(
+    (a: any) => !a.departure_time && a.elder_id === elderId,
+  ) || null;
+  const activeRecordForOtherElder = todayRecords.find(
+    (a: any) => !a.departure_time && a.elder_id !== elderId,
+  ) || null;
+  const hasRecordForThisElder = todayRecords.some(
+    (a: any) => a.elder_id === elderId,
+  );
 
   const checkIn = useMutation({
     mutationFn: async () => {
       const record = {
         id: generateId(),
         caregiver_id: userId,
+        elder_id: elderId,
         created_at: new Date().toISOString(),
         departure_time: null,
       };
@@ -85,12 +98,12 @@ function CuidadorElderView() {
 
   const checkOut = useMutation({
     mutationFn: async () => {
-      if (!activeRecord) return;
+      if (!activeRecordForThisElder) return;
       const res = await fetch(`${API_URL()}/attendance`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: activeRecord.id,
+          id: activeRecordForThisElder.id,
           departure_time: new Date().toISOString(),
         }),
       });
@@ -110,7 +123,7 @@ function CuidadorElderView() {
         to="/idosos"
         className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
       >
-        <ArrowLeft className="h-4 w-4" /> Voltar para idosos
+        <ArrowLeft className="h-4 w-4" /> Voltar para pacientes
       </Link>
       {isLoading ? (
         <Skeleton className="h-28 w-full" />
@@ -150,7 +163,7 @@ function CuidadorElderView() {
               <div>
                 <p className="font-semibold">Registrar Relatório</p>
                 <p className="text-sm text-muted-foreground">
-                  Preencha o relatório de cuidados deste idoso para enviar ao
+                  Preencha o relatório de cuidados deste paciente para enviar ao
                   supervisor.
                 </p>
               </div>
@@ -165,42 +178,46 @@ function CuidadorElderView() {
 
           <Card className="mt-4">
             <CardContent className="flex flex-col items-center gap-3 p-5 text-center">
-              {activeRecord && (
-                <Badge className="bg-success text-sm px-3 py-1">
-                  <LogIn className="mr-1 h-3.5 w-3.5" />
-                  Presente — Entrada:{" "}
-                  {new Date(activeRecord.created_at).toLocaleTimeString("pt-BR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Badge>
-              )}
-              {activeRecord && (
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full max-w-xs gap-2 border-destructive/30 text-destructive hover:bg-destructive/10"
-                  onClick={() => checkOut.mutate()}
-                  disabled={checkOut.isPending}
-                >
-                  <LogOut className="h-4 w-4" />
-                  {checkOut.isPending ? "Registrando saída..." : "Registrar Saída"}
-                </Button>
-              )}
-              <Button
-                variant="default"
-                size="lg"
-                className="w-full max-w-xs gap-2 bg-success hover:bg-success/90"
-                onClick={() => checkIn.mutate()}
-                disabled={checkIn.isPending}
-              >
-                <LogIn className="h-4 w-4" />
-                {checkIn.isPending ? "Registrando..." : "Registrar Entrada"}
-              </Button>
-              {todayRecords.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {todayRecords.length} registro{todayRecords.length > 1 ? "s" : ""} hoje
+              {activeRecordForThisElder ? (
+                <>
+                  <Badge className="bg-success text-sm px-3 py-1">
+                    <LogIn className="mr-1 h-3.5 w-3.5" />
+                    Presente — Entrada:{" "}
+                    {new Date(activeRecordForThisElder.created_at).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full max-w-xs gap-2 border-destructive/30 text-destructive hover:bg-destructive/10"
+                    onClick={() => checkOut.mutate()}
+                    disabled={checkOut.isPending}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {checkOut.isPending ? "Registrando saída..." : "Registrar Saída"}
+                  </Button>
+                </>
+              ) : activeRecordForOtherElder ? (
+                <p className="text-sm text-destructive font-semibold">
+                  Você já está presente com outro paciente. Registre saída primeiro.
                 </p>
+              ) : hasRecordForThisElder ? (
+                <p className="text-sm text-muted-foreground">
+                  Presença já registrada hoje para este paciente.
+                </p>
+              ) : (
+                <Button
+                  variant="default"
+                  size="lg"
+                  className="w-full max-w-xs gap-2 bg-success hover:bg-success/90"
+                  onClick={() => checkIn.mutate()}
+                  disabled={checkIn.isPending}
+                >
+                  <LogIn className="h-4 w-4" />
+                  {checkIn.isPending ? "Registrando..." : "Registrar Entrada"}
+                </Button>
               )}
             </CardContent>
           </Card>
@@ -208,7 +225,7 @@ function CuidadorElderView() {
       ) : (
         <Card className="mb-6">
           <CardContent className="p-6 text-center text-muted-foreground">
-            Idoso nao encontrado.
+            Paciente nao encontrado.
           </CardContent>
         </Card>
       )}
@@ -414,7 +431,7 @@ function SupervisorElderView() {
         to="/idosos"
         className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
       >
-        <ArrowLeft className="h-4 w-4" /> Voltar para idosos
+        <ArrowLeft className="h-4 w-4" /> Voltar para pacientes
       </Link>
 
       {isLoading ? (
@@ -447,13 +464,6 @@ function SupervisorElderView() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="outline" className="gap-1.5">
-                <Link to="/registrar" search={{ elderId: elder.id }}>
-                  <ClipboardPlus className="h-4 w-4 text-primary" />
-                  Registrar Cuidado
-                </Link>
-              </Button>
-
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="gap-2">
@@ -508,7 +518,7 @@ function SupervisorElderView() {
       ) : (
         <Card className="mb-6">
           <CardContent className="p-6 text-center text-muted-foreground">
-            Idoso nao encontrado.
+            Paciente nao encontrado.
           </CardContent>
         </Card>
       )}

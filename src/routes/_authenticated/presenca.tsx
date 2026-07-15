@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const API_URL = () => `http://${window.location.hostname}:3001/api`;
+const API_URL = () => `/api`;
 
 export const Route = createFileRoute("/_authenticated/presenca")({
   component: PresencaPage,
@@ -54,6 +54,14 @@ function PresencaPage() {
     queryKey: ["caregivers"],
     queryFn: async () => {
       const res = await fetch(`${API_URL()}/caregivers`);
+      return res.json();
+    },
+  });
+
+  const { data: elders = [] } = useQuery({
+    queryKey: ["elders"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL()}/elders`);
       return res.json();
     },
   });
@@ -102,14 +110,23 @@ function PresencaPage() {
       ? "Supervisor"
       : caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
 
+  const elderName = (id: string) =>
+    elders?.find((e: any) => e.id === id)?.full_name || "";
+
   const filtered = (attendance as any[]).filter((a: any) => {
-    if (filterDate && !a.created_at.startsWith(filterDate)) return false;
+    if (filterDate) {
+      const d = new Date(a.created_at);
+      const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      if (local !== filterDate) return false;
+    }
     return true;
   }).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
 
-  const todayRecords = (attendance as any[]).filter((a: any) =>
-    a.created_at.startsWith(todayStr),
-  );
+  const todayRecords = (attendance as any[]).filter((a: any) => {
+    const d = new Date(a.created_at);
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return local === todayStr;
+  });
 
   const activeNow = todayRecords.filter((a: any) => !a.departure_time).length;
 
@@ -164,6 +181,7 @@ function PresencaPage() {
       }
       return [
         caregiverName(a.caregiver_id),
+        a.elder_id ? elderName(a.elder_id) : "—",
         formatDate(a.created_at),
         formatTime(a.created_at),
         dep ? formatTime(a.departure_time) : "—",
@@ -174,16 +192,17 @@ function PresencaPage() {
 
     autoTable(doc, {
       startY: y,
-      head: [["Cuidador", "Data", "Entrada", "Saída", "Status", "Duração"]],
+      head: [["Cuidador", "Idoso", "Data", "Entrada", "Saída", "Status", "Duração"]],
       body: bodyRows,
       styles: { fontSize: 9, cellPadding: 4, valign: "middle" },
       columnStyles: {
-        0: { cellWidth: 70 },
-        1: { cellWidth: 40 },
-        2: { cellWidth: 30 },
-        3: { cellWidth: 30 },
-        4: { cellWidth: 40 },
-        5: { cellWidth: 30 },
+        0: { cellWidth: 60 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 35 },
+        6: { cellWidth: 25 },
       },
       headStyles: { fillColor: [34, 102, 68], textColor: 255, fontStyle: "bold" },
       alternateRowStyles: { fillColor: [245, 250, 247] },
@@ -308,6 +327,11 @@ function PresencaPage() {
                         <span className="font-semibold text-sm">
                           {caregiverName(a.caregiver_id)}
                         </span>
+                        {a.elder_id && elderName(a.elder_id) && (
+                          <span className="text-xs text-muted-foreground">
+                            — {elderName(a.elder_id)}
+                          </span>
+                        )}
                         {isActive ? (
                           <Badge variant="default" className="bg-success text-[10px]">
                             Presente

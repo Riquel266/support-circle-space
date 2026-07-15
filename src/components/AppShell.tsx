@@ -20,12 +20,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navItems = [
     ...(role === "supervisor" ? [
       { to: "/painel", label: "Painel", icon: LayoutDashboard },
-      { to: "/idosos", label: "Idosos", icon: Users },
+      { to: "/idosos", label: "Pacientes", icon: Users },
       { to: "/equipe", label: "Equipe", icon: UserCog },
       { to: "/presenca", label: "Presença", icon: CalendarCheck },
     ] : []),
     ...(role === "cuidador" ? [
-      { to: "/idosos", label: "Idosos", icon: Users },
+      { to: "/idosos", label: "Pacientes", icon: Users },
     ] : []),
   ];
 

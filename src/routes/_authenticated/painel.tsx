@@ -16,7 +16,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { SEVERITY_LABELS, formatDateTime, type Alert, type CareRecord } from "@/lib/care";
 
-const API_URL = () => `http://${window.location.hostname}:3001/api`;
+const API_URL = () => `/api`;
 
 export const Route = createFileRoute("/_authenticated/painel")({
   component: PainelPage,
@@ -128,8 +128,10 @@ function SupervisorDashboard() {
   });
 
   const profileName = (id: string) => {
+    const found = caregivers?.find((c: any) => c.id === id);
+    if (found) return found.full_name;
     if (id === userId) return userName || "Supervisor";
-    return caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+    return "Desconhecido";
   };
   const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Idoso";
 
@@ -149,92 +151,6 @@ function SupervisorDashboard() {
         <StatCard icon={BellRing} label="Alertas abertos" value={alerts?.length ?? 0} highlight={(alerts?.length ?? 0) > 0} />
         <StatCard icon={HeartPulse} label="Ultimos registros" value={records?.length ?? 0} />
       </div>
-
-      <section className="bg-card border rounded-2xl p-5 shadow-sm">
-        <h2 className="mb-4 font-display text-lg font-bold flex items-center gap-2 text-foreground">
-          <ClipboardList className="h-5 w-5 text-primary" />
-          Resumo de cuidados (ultimas 12 horas)
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {elders?.map((elder: any) => {
-            const elderRecs = recentRecords.filter((r: any) => r.elder_id === elder.id);
-            const elderAssigns = assignments?.filter((a: any) => a.elder_id === elder.id) ?? [];
-            const caregiverNames = elderAssigns
-              .map((a: any) => caregivers?.find((c: any) => c.id === a.caregiver_id)?.full_name)
-              .filter(Boolean)
-              .join(", ");
-            return (
-              <div key={elder.id} className="rounded-xl border p-4 bg-background/50 space-y-3">
-                <div className="flex items-center gap-2">
-                  {elder.photo_url ? (
-                    <img src={elder.photo_url} alt={elder.full_name} className="h-8 w-8 rounded-full object-cover" />
-                  ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-bold">
-                      {elder.full_name.charAt(0)}
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <span className="font-semibold text-sm block truncate">{elder.full_name}</span>
-                    <span className="text-xs text-muted-foreground block truncate">
-                      Cuidadores: {caregiverNames || "nenhum vinculado"}
-                    </span>
-                  </div>
-                </div>
-                
-                {elderRecs.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {elderRecs.map((r: any) => {
-                      const time = new Date(r.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-                      let summary = "";
-                      if (r.record_type === "sinais_vitais") {
-                        const s = [];
-                        if (r.data?.pressao_sistolica) s.push(`PA: ${r.data.pressao_sistolica}/${r.data.pressao_diastolica}`);
-                        if (r.data?.temperatura) s.push(`T: ${r.data.temperatura}C`);
-                        summary = `Sinais vitais (${s.join(", ")})`;
-                      } else if (r.record_type === "medicacao") {
-                        summary = `Remedio: ${r.data?.medicamento}`;
-                      } else if (r.record_type === "alimentacao") {
-                        summary = `Refeicao: ${r.data?.refeicao}`;
-                      } else if (r.record_type === "diurese") {
-                        summary = `Diurese: ${r.data?.teve_diurese} (${r.data?.aspecto})`;
-                      } else if (r.record_type === "passagem_plantao") {
-                        summary = `Plantao: ${r.data?.estado_humor}`;
-                      } else {
-                        summary = `Ocorrencia: ${r.data?.tipo_ocorrencia}`;
-                      }
-                      const cgName = profileName(r.caregiver_id);
-                      return (
-                        <div key={r.id} className="text-xs flex flex-col border-l-2 border-primary/40 pl-2 py-0.5">
-                          <div className="flex justify-between gap-1 text-muted-foreground">
-                            <span className="font-semibold text-foreground truncate">{summary}</span>
-                            <span className="shrink-0 font-medium">{time}</span>
-                          </div>
-                          <span className="text-[10px] text-muted-foreground">Por: {cgName}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs font-medium text-destructive bg-destructive/10 rounded-lg p-2 flex items-center gap-1">
-                    Sem cuidados nas ultimas 12h
-                  </p>
-                )}
-                
-                <div className="pt-2 border-t border-dashed mt-2 flex justify-end">
-                  <Button size="sm" asChild variant="ghost" className="gap-1 text-xs text-primary hover:text-primary-foreground hover:bg-primary h-7 px-2">
-                    <Link to="/registrar" search={{ elderId: elder.id }}>
-                      <ClipboardPlus className="h-3.5 w-3.5" /> Registrar Cuidado
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-          {(!elders || elders.length === 0) && (
-            <p className="text-sm text-muted-foreground col-span-full text-center">Nenhum idoso cadastrado para exibir o resumo.</p>
-          )}
-        </div>
-      </section>
 
       <section>
         <h2 className="mb-3 font-display text-lg font-bold">Atividade recente</h2>
@@ -489,6 +405,88 @@ function HandoversTab() {
                   )}
                   {r.data?.notes && <p className="text-muted-foreground mt-1">Nota: {r.data.notes}</p>}
                 </div>
+                <div className="flex justify-end pt-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                    onClick={() => {
+                      const doc = new jsPDF({ unit: "pt", format: "a4" });
+                      const pageWidth = doc.internal.pageSize.getWidth();
+                      const marginX = 40;
+
+                      doc.setFillColor(34, 102, 68);
+                      doc.rect(0, 0, pageWidth, 70, "F");
+                      doc.setTextColor(255, 255, 255);
+                      doc.setFont("helvetica", "bold");
+                      doc.setFontSize(16);
+                      doc.text("CuidarBem", marginX, 30);
+                      doc.setFont("helvetica", "normal");
+                      doc.setFontSize(10);
+                      doc.text("Passagem de Plantao", marginX, 48);
+                      doc.setFontSize(9);
+                      doc.text(formatDateTime(r.created_at), marginX, 62);
+
+                      let y = 90;
+                      doc.setTextColor(20, 20, 20);
+
+                      const addField = (label: string, value: string) => {
+                        doc.setFont("helvetica", "bold");
+                        doc.setFontSize(10);
+                        doc.text(label, marginX, y);
+                        doc.setFont("helvetica", "normal");
+                        doc.text(value || "—", marginX + 80, y);
+                        y += 16;
+                      };
+
+                      addField("Paciente:", elder?.full_name || "—");
+                      addField("Cuidador:", cg?.full_name || "—");
+                      y += 4;
+
+                      doc.setFont("helvetica", "bold");
+                      doc.setFontSize(12);
+                      doc.text("Resumo do Plantao", marginX, y);
+                      y += 16;
+                      doc.setFont("helvetica", "normal");
+                      doc.setFontSize(10);
+                      const resumoSplit = doc.splitTextToSize(r.data?.resumo_plantao || "—", pageWidth - marginX * 2);
+                      doc.text(resumoSplit, marginX, y);
+                      y += resumoSplit.length * 13 + 6;
+
+                      addField("Estado de humor:", r.data?.estado_humor || "—");
+
+                      if (r.data?.intercorrencias && r.data.intercorrencias !== "nenhuma") {
+                        doc.setFont("helvetica", "bold");
+                        doc.setTextColor(180, 40, 40);
+                        doc.setFontSize(10);
+                        doc.text("Intercorrencias:", marginX, y);
+                        doc.setFont("helvetica", "normal");
+                        doc.text(r.data.intercorrencias, marginX + 90, y);
+                        y += 16;
+                        doc.setTextColor(20, 20, 20);
+                      }
+
+                      if (r.data?.notes) {
+                        addField("Observacao:", r.data.notes);
+                      }
+
+                      const pageCount = doc.getNumberOfPages();
+                      for (let i = 1; i <= pageCount; i++) {
+                        doc.setPage(i);
+                        doc.setFontSize(8);
+                        doc.setTextColor(150, 150, 150);
+                        doc.text(`CuidarBem — Pagina ${i} de ${pageCount}`, pageWidth - marginX, doc.internal.pageSize.getHeight() - 20, { align: "right" });
+                      }
+
+                      const safeName = (elder?.full_name || "paciente").replace(/[^\p{L}\p{N}]+/gu, "_");
+                      const dateStr = new Date(r.created_at).toISOString().slice(0, 10);
+                      doc.save(`plantao_${safeName}_${dateStr}.pdf`);
+                    }}
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    Baixar PDF
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -550,8 +548,10 @@ function CaregiverDashboard({ userId }: { userId: string }) {
   });
 
   const profileName = (id: string) => {
+    const found = caregivers?.find((c: any) => c.id === id);
+    if (found) return found.full_name;
     if (id === userId) return userName || "Supervisor";
-    return caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+    return "Desconhecido";
   };
   const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Idoso";
 

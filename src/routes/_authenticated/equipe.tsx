@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { UserPlus, Camera } from "lucide-react";
+import { UserPlus, Camera, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { generateId } from "@/lib/utils";
 import { useRole } from "@/hooks/use-role";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-const API_URL = () => `http://${window.location.hostname}:3001/api`;
+const API_URL = () => `/api`;
 
 export const Route = createFileRoute("/_authenticated/equipe")({
   component: EquipePage,
@@ -29,6 +30,7 @@ function EquipePage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [isSupervisor, setIsSupervisor] = useState(false);
 
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
@@ -48,13 +50,16 @@ function EquipePage() {
       fullName: string;
       phone?: string;
       photo_url: string | null;
+      role?: string;
     }) => {
       const newCg = {
         id: generateId(),
         full_name: input.fullName,
         phone: input.phone || null,
         email: input.email,
+        password: input.password,
         photo_url: input.photo_url,
+        role: input.role || "cuidador",
         created_at: new Date().toISOString(),
       };
       const res = await fetch(`${API_URL()}/caregivers`, {
@@ -72,6 +77,21 @@ function EquipePage() {
     },
     onError: (err: Error) =>
       toast.error(err.message || "Erro ao cadastrar cuidador."),
+  });
+
+  const deleteCaregiver = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${API_URL()}/caregivers?id=${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Erro ao excluir.");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["caregivers"] });
+      toast.success("Cuidador excluido!");
+    },
+    onError: (err: Error) =>
+      toast.error(err.message || "Nao foi possivel excluir."),
   });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,6 +112,7 @@ function EquipePage() {
       password: String(form.get("password") ?? ""),
       phone: String(form.get("phone") ?? "").trim() || undefined,
       photo_url: photoUrl,
+      role: isSupervisor ? "supervisor" : "cuidador",
     });
   };
 
@@ -100,7 +121,7 @@ function EquipePage() {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Equipe de Cuidadores</h1>
         {role === "supervisor" && (
-          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setPhotoUrl(null); }}>
+            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setPhotoUrl(null); setIsSupervisor(false); } }}>
             <DialogTrigger asChild>
               <Button size="sm"><UserPlus className="mr-1 h-4 w-4" /> Novo</Button>
             </DialogTrigger>
@@ -139,6 +160,16 @@ function EquipePage() {
                   <Label htmlFor="cg-phone">Telefone (opcional)</Label>
                   <Input id="cg-phone" name="phone" maxLength={30} />
                 </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="cg-supervisor"
+                    checked={isSupervisor}
+                    onCheckedChange={(checked) => setIsSupervisor(checked === true)}
+                  />
+                  <Label htmlFor="cg-supervisor" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Acesso de supervisor
+                  </Label>
+                </div>
                 <Button type="submit" className="w-full" disabled={addCaregiver.isPending}>
                   {addCaregiver.isPending ? "Cadastrando..." : "Cadastrar"}
                 </Button>
@@ -165,6 +196,11 @@ function EquipePage() {
               )}
               <div>
                 <p className="font-semibold">{cg.full_name}</p>
+                {cg.role === "supervisor" && (
+                  <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    Supervisor
+                  </span>
+                )}
                 {cg.email && (
                   <p className="text-xs text-muted-foreground">{cg.email}</p>
                 )}
@@ -172,6 +208,21 @@ function EquipePage() {
                   <p className="text-xs text-muted-foreground">{cg.phone}</p>
                 )}
               </div>
+              {role === "supervisor" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => {
+                    if (window.confirm(`Excluir ${cg.full_name}?`)) {
+                      deleteCaregiver.mutate(cg.id);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Excluir
+                </Button>
+              )}
             </CardContent>
           </Card>
         ))}

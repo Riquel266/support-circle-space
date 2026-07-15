@@ -80,7 +80,7 @@ Bun.serve({
         const hashed = hashPassword(password);
         const caregiver = db.caregivers.find((c: any) => c.email === email && c.password_hash === hashed);
         if (caregiver) {
-          return ok({ user: { id: caregiver.id, full_name: caregiver.full_name, email: caregiver.email, role: "cuidador" } });
+          return ok({ user: { id: caregiver.id, full_name: caregiver.full_name, email: caregiver.email, role: caregiver.role || "cuidador" } });
         }
 
         const supervisorEmail = "admin@cuidarbem.com";
@@ -93,22 +93,17 @@ Bun.serve({
       }
 
       if (pathname === "/api/auth/signup" && method === "POST") {
-        const { email, password, full_name } = await req.json();
-        if (!email || !password || !full_name) return ok({ error: "Campos obrigatorios" }, 400);
-        if (password.length < 6) return ok({ error: "Minimo 6 caracteres" }, 400);
+        return ok({ error: "Cadastro desabilitado. Fale com o administrador." }, 403);
+      }
 
-        const existing = db.caregivers.find((c: any) => c.email === email);
-        if (existing) return ok({ error: "Email ja cadastrado" }, 409);
-
-        const newSupervisor = {
-          id: crypto.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2)),
-          full_name,
-          email,
-          password_hash: hashPassword(password),
-          role: "supervisor",
-          created_at: new Date().toISOString(),
-        };
-        return ok({ user: { id: newSupervisor.id, full_name, email, role: "supervisor" } });
+      if (pathname === "/api/auth/validate" && method === "POST") {
+        const { userId, role } = await req.json();
+        if (role === "supervisor") {
+          const validSupervisor = userId === "0e7874c3-a937-4158-a0ab-949991be81b9" || db.caregivers.some((c: any) => c.id === userId && c.role === "supervisor");
+          return ok({ valid: validSupervisor });
+        }
+        const exists = db.caregivers.some((c: any) => c.id === userId);
+        return ok({ valid: exists });
       }
 
       if (pathname === "/api/elders") {
@@ -140,6 +135,15 @@ Bun.serve({
           db.caregivers.push(body);
           writeDb(db);
           return ok(body, 201);
+        }
+        if (method === "DELETE") {
+          const id = url.searchParams.get("id");
+          if (id) {
+            db.caregivers = db.caregivers.filter((c: any) => c.id !== id);
+            db.assignments = db.assignments.filter((a: any) => a.caregiver_id !== id);
+            writeDb(db);
+          }
+          return ok({ ok: true });
         }
       }
 

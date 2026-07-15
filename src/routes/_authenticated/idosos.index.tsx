@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { UserPlus, ChevronRight, Camera } from "lucide-react";
+import { UserPlus, ChevronRight, Camera, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRole } from "@/hooks/use-role";
 import { AppShell } from "@/components/AppShell";
@@ -20,7 +20,7 @@ import {
 import { calcAge } from "@/lib/care";
 import { generateId } from "@/lib/utils";
 
-const API_URL = () => `http://${window.location.hostname}:3001/api`;
+const API_URL = () => `/api`;
 
 export const Route = createFileRoute("/_authenticated/idosos/")({
   component: IdososPage,
@@ -31,6 +31,7 @@ function IdososPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: elders } = useQuery({
     queryKey: ["elders-list"],
@@ -65,12 +66,27 @@ function IdososPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["elders-list"] });
-      toast.success("Idoso cadastrado!");
+      toast.success("Paciente cadastrado!");
       setPhotoUrl(null);
       setOpen(false);
     },
     onError: (err: Error) =>
       toast.error(err.message || "Nao foi possivel cadastrar."),
+  });
+
+  const deleteElder = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${API_URL()}/elders?id=${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Erro ao excluir.");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["elders-list"] });
+      toast.success("Paciente excluido!");
+    },
+    onError: (err: Error) =>
+      toast.error(err.message || "Nao foi possivel excluir."),
   });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,7 +112,7 @@ function IdososPage() {
     const form = new FormData(e.currentTarget);
     const name = String(form.get("full_name") ?? "").trim();
     if (name.length < 2) {
-      toast.error("Informe o nome do idoso.");
+      toast.error("Informe o nome do paciente.");
       return;
     }
     addElder.mutate({
@@ -110,23 +126,23 @@ function IdososPage() {
   return (
     <AppShell>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">Idosos</h1>
+        <h1 className="font-display text-2xl font-bold">Pacientes</h1>
         {role === "supervisor" && (
           <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
               <Button>
-                <UserPlus className="mr-1 h-4 w-4" /> Cadastrar idoso
+                <UserPlus className="mr-1 h-4 w-4" /> Cadastrar paciente
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle className="font-display">
-                  Cadastrar idoso
+                  Cadastrar paciente
                 </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleAdd} className="space-y-4">
                 <div className="flex flex-col items-center space-y-1.5">
-                  <Label className="self-start">Foto do idoso</Label>
+                  <Label className="self-start">Foto do paciente</Label>
                   <label className="relative flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-muted-foreground/30 bg-secondary transition-colors hover:border-primary/50">
                     <input
                       type="file"
@@ -195,46 +211,84 @@ function IdososPage() {
         )}
       </div>
 
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar paciente..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <div className="space-y-2">
-        {elders?.map((elder: any) => (
-          <Link
-            key={elder.id}
-            to="/idosos/$elderId"
-            params={{ elderId: elder.id }}
-          >
-            <Card className="mb-2 transition-shadow hover:shadow-md">
-              <CardContent className="flex items-center gap-3 p-4">
-                {elder.photo_url ? (
-                  <img
-                    src={elder.photo_url}
-                    alt={elder.full_name}
-                    className="h-11 w-11 shrink-0 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary font-display text-lg font-bold text-secondary-foreground">
-                    {elder.full_name.charAt(0)}
+        {elders?.filter((e: any) =>
+          !search || (e.full_name || "").toLowerCase().includes(search.toLowerCase()),
+        ).map((elder: any) => (
+          <div key={elder.id} className="mb-2">
+            <Link
+              to="/idosos/$elderId"
+              params={{ elderId: elder.id }}
+            >
+              <Card className="transition-shadow hover:shadow-md">
+                <CardContent className="flex items-center gap-3 p-4">
+                  {elder.photo_url ? (
+                    <img
+                      src={elder.photo_url}
+                      alt={elder.full_name}
+                      className="h-11 w-11 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary font-display text-lg font-bold text-secondary-foreground">
+                      {elder.full_name.charAt(0)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{elder.full_name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {[
+                        calcAge(elder.birth_date),
+                        elder.medical_notes?.slice(0, 60),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
                   </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{elder.full_name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {[
-                      calcAge(elder.birth_date),
-                      elder.medical_notes?.slice(0, 60),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
+                  {role === "supervisor" && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (window.confirm(`Excluir ${elder.full_name}?`)) {
+                          deleteElder.mutate(elder.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
         ))}
         {elders && elders.length === 0 && (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              Nenhum idoso cadastrado ainda.
+              Nenhum paciente cadastrado ainda.
+            </CardContent>
+          </Card>
+        )}
+        {elders && elders.length > 0 && elders.filter((e: any) =>
+          !search || (e.full_name || "").toLowerCase().includes(search.toLowerCase()),
+        ).length === 0 && (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground">
+              Nenhum paciente encontrado para "{search}".
             </CardContent>
           </Card>
         )}
