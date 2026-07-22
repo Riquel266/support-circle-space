@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { UserPlus, Camera, Trash2 } from "lucide-react";
+import { UserPlus, Camera, Trash2, Pencil, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { generateId } from "@/lib/utils";
 import { useRole } from "@/hooks/use-role";
@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { AddressSearch } from "@/components/AddressSearch";
 
 const API_URL = () => `/api`;
 
@@ -29,8 +30,16 @@ function EquipePage() {
   const { role } = useRole();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingCg, setEditingCg] = useState<any>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [editPhotoUrl, setEditPhotoUrl] = useState<string | null>(null);
   const [isSupervisor, setIsSupervisor] = useState(false);
+  const [editIsSupervisor, setEditIsSupervisor] = useState(false);
+  const [addAddress, setAddAddress] = useState("");
+  const [addCoords, setAddCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [editAddress, setEditAddress] = useState("");
+  const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
@@ -51,6 +60,10 @@ function EquipePage() {
       phone?: string;
       photo_url: string | null;
       role?: string;
+      location_address: string | null;
+      location_lat: number | null;
+      location_lng: number | null;
+      location_radius: number;
     }) => {
       const newCg = {
         id: generateId(),
@@ -60,6 +73,10 @@ function EquipePage() {
         password: input.password,
         photo_url: input.photo_url,
         role: input.role || "cuidador",
+        location_address: input.location_address,
+        location_lat: input.location_lat,
+        location_lng: input.location_lng,
+        location_radius: input.location_radius,
         created_at: new Date().toISOString(),
       };
       const res = await fetch(`${API_URL()}/caregivers`, {
@@ -88,10 +105,42 @@ function EquipePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["caregivers"] });
-      toast.success("Cuidador excluido!");
+      toast.success("Cuidador excluído!");
     },
     onError: (err: Error) =>
-      toast.error(err.message || "Nao foi possivel excluir."),
+      toast.error(err.message || "Não foi possível excluir."),
+  });
+
+  const updateCaregiver = useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      full_name: string;
+      email: string;
+      password?: string;
+      phone?: string;
+      photo_url: string | null;
+      role: string;
+      location_address: string | null;
+      location_lat: number | null;
+      location_lng: number | null;
+      location_radius: number;
+    }) => {
+      const res = await fetch(`${API_URL()}/caregivers`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Erro ao atualizar.");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["caregivers"] });
+      toast.success("Cuidador atualizado!");
+      setEditOpen(false);
+      setEditingCg(null);
+      setEditPhotoUrl(null);
+    },
+    onError: (err: Error) =>
+      toast.error(err.message || "Não foi possível atualizar."),
   });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,7 +162,45 @@ function EquipePage() {
       phone: String(form.get("phone") ?? "").trim() || undefined,
       photo_url: photoUrl,
       role: isSupervisor ? "supervisor" : "cuidador",
+      location_address: addAddress || null,
+      location_lat: addCoords?.lat ?? null,
+      location_lng: addCoords?.lng ?? null,
+      location_radius: Number(form.get("location_radius")) || 100,
     });
+  };
+
+  const handleEdit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingCg) return;
+    const form = new FormData(e.currentTarget);
+    const payload: any = {
+      id: editingCg.id,
+      full_name: String(form.get("full_name") ?? "").trim(),
+      email: String(form.get("email") ?? "").trim(),
+      phone: String(form.get("phone") ?? "").trim() || null,
+      photo_url: editPhotoUrl,
+      role: editIsSupervisor ? "supervisor" : "cuidador",
+      location_address: editAddress || null,
+      location_lat: editCoords?.lat ?? null,
+      location_lng: editCoords?.lng ?? null,
+      location_radius: Number(form.get("location_radius")) || 100,
+    };
+    const pwd = String(form.get("password") ?? "");
+    if (pwd) payload.password = pwd;
+    updateCaregiver.mutate(payload);
+  };
+
+  const openEdit = (cg: any) => {
+    setEditingCg(cg);
+    setEditPhotoUrl(cg.photo_url || null);
+    setEditIsSupervisor(cg.role === "supervisor");
+    setEditAddress(cg.location_address || "");
+    setEditCoords(
+      cg.location_lat && cg.location_lng
+        ? { lat: Number(cg.location_lat), lng: Number(cg.location_lng) }
+        : null
+    );
+    setEditOpen(true);
   };
 
   return (
@@ -121,7 +208,8 @@ function EquipePage() {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Equipe de Cuidadores</h1>
         {role === "supervisor" && (
-            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setPhotoUrl(null); setIsSupervisor(false); } }}>
+          <>
+            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setPhotoUrl(null); setIsSupervisor(false); setAddAddress(""); setAddCoords(null); } }}>
             <DialogTrigger asChild>
               <Button size="sm"><UserPlus className="mr-1 h-4 w-4" /> Novo</Button>
             </DialogTrigger>
@@ -160,6 +248,25 @@ function EquipePage() {
                   <Label htmlFor="cg-phone">Telefone (opcional)</Label>
                   <Input id="cg-phone" name="phone" maxLength={30} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5" />
+                    Localização de trabalho
+                  </Label>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Endereço</Label>
+                    <AddressSearch
+                      value={addAddress}
+                      onChange={setAddAddress}
+                      onCoordinates={(lat, lng) => setAddCoords({ lat, lng })}
+                      placeholder="Rua, número, bairro, cidade"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cg-radius" className="text-xs text-muted-foreground">Raio permitido (metros)</Label>
+                    <Input id="cg-radius" name="location_radius" type="number" min="10" max="5000" defaultValue={100} />
+                  </div>
+                </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="cg-supervisor"
@@ -176,6 +283,92 @@ function EquipePage() {
               </form>
             </DialogContent>
           </Dialog>
+          <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) { setEditingCg(null); setEditPhotoUrl(null); setEditAddress(""); setEditCoords(null); } }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-display">Editar cuidador</DialogTitle>
+              </DialogHeader>
+              {editingCg && (
+                <form onSubmit={handleEdit} className="space-y-4">
+                  <div className="flex flex-col items-center space-y-1.5">
+                    <Label className="self-start">Foto do cuidador</Label>
+                    <label className="relative flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-muted-foreground/30 bg-secondary transition-colors hover:border-primary/50">
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setEditPhotoUrl(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
+                      {editPhotoUrl ? (
+                        <img src={editPhotoUrl} alt="Preview" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-center text-xs text-muted-foreground">
+                          <Camera className="h-6 w-6" />
+                          <span>Adicionar</span>
+                        </div>
+                      )}
+                    </label>
+                    {editPhotoUrl && (
+                      <button type="button" onClick={() => setEditPhotoUrl(null)} className="mt-1 text-xs text-destructive hover:underline">
+                        Remover foto
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-cg-name">Nome completo</Label>
+                    <Input id="edit-cg-name" name="full_name" required maxLength={100} defaultValue={editingCg.full_name} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-cg-email">E-mail</Label>
+                    <Input id="edit-cg-email" name="email" type="email" required maxLength={255} defaultValue={editingCg.email} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-cg-password">Nova senha (deixe vazio para manter)</Label>
+                    <Input id="edit-cg-password" name="password" type="text" minLength={6} maxLength={72} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-cg-phone">Telefone (opcional)</Label>
+                    <Input id="edit-cg-phone" name="phone" maxLength={30} defaultValue={editingCg.phone || ""} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5" />
+                      Localização de trabalho
+                    </Label>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Endereço</Label>
+                      <AddressSearch
+                        value={editAddress}
+                        onChange={setEditAddress}
+                        onCoordinates={(lat, lng) => setEditCoords({ lat, lng })}
+                        placeholder="Rua, número, bairro, cidade"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Raio permitido (metros)</Label>
+                      <Input name="location_radius" type="number" min="10" max="5000" defaultValue={editingCg.location_radius || 100} />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-cg-supervisor"
+                      checked={editIsSupervisor}
+                      onCheckedChange={(checked) => setEditIsSupervisor(checked === true)}
+                    />
+                    <Label htmlFor="edit-cg-supervisor" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Acesso de supervisor
+                    </Label>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={updateCaregiver.isPending}>
+                    {updateCaregiver.isPending ? "Salvando..." : "Salvar alterações"}
+                  </Button>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+          </>
         )}
       </div>
 
@@ -209,19 +402,30 @@ function EquipePage() {
                 )}
               </div>
               {role === "supervisor" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => {
-                    if (window.confirm(`Excluir ${cg.full_name}?`)) {
-                      deleteCaregiver.mutate(cg.id);
-                    }
-                  }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Excluir
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                    onClick={() => openEdit(cg)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Editar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      if (window.confirm(`Excluir ${cg.full_name}?`)) {
+                        deleteCaregiver.mutate(cg.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Excluir
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

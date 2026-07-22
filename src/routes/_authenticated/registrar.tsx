@@ -6,6 +6,7 @@ import { generateId } from "@/lib/utils";
 import { useRole } from "@/hooks/use-role";
 import { AppShell } from "@/components/AppShell";
 import { SelfieCapture } from "@/components/SelfieCapture";
+import { getCurrentPosition, isWithinRadius, haversineDistance } from "@/lib/geo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,7 @@ function RegistrarPage() {
   const [saving, setSaving] = useState(false);
   const [administrado, setAdministrado] = useState(true);
   const [caregiverId, setCaregiverId] = useState("");
+  const [caregiverLocationError, setCaregiverLocationError] = useState<string | null>(null);
 
   const { data: activeAttendance } = useQuery({
     queryKey: ["active-attendance", userId],
@@ -131,6 +133,36 @@ function RegistrarPage() {
       toast.error("Capture sua assinatura facial antes de salvar.");
       return;
     }
+
+    // Geolocation verification for caregivers
+    if (role === "cuidador") {
+      const selectedElderData = (allElders as any[]).find((e: any) => e.id === elderId);
+      if (selectedElderData?.location_lat && selectedElderData?.location_lng) {
+        try {
+          const position = await getCurrentPosition();
+          const userLat = position.coords.latitude;
+          const userLng = position.coords.longitude;
+          const elderLat = Number(selectedElderData.location_lat);
+          const elderLng = Number(selectedElderData.location_lng);
+          const radius = Number(selectedElderData.location_radius) || 100;
+
+          if (!isWithinRadius(userLat, userLng, elderLat, elderLng, radius)) {
+            const distance = haversineDistance(userLat, userLng, elderLat, elderLng);
+            const msg = `Você está a ${Math.round(distance)}m do paciente. Registre-se na residência (até ${radius}m).`;
+            setCaregiverLocationError(msg);
+            toast.error(msg);
+            return;
+          }
+          setCaregiverLocationError(null);
+        } catch (err: any) {
+          const msg = "Não foi possível acessar sua localização. Habilite o GPS.";
+          setCaregiverLocationError(msg);
+          toast.error(msg);
+          return;
+        }
+      }
+    }
+
     const form = new FormData(e.currentTarget);
     const val = (k: string) => String(form.get(k) ?? "").trim();
 
@@ -208,12 +240,12 @@ function RegistrarPage() {
     if (val("resumo_plantao") || val("intercorrencias") || val("notes_plantao")) {
       const resumo = val("resumo_plantao");
       if (!resumo) {
-        toast.error("Para enviar o Relatorio de Plantao, escreva um resumo.");
+        toast.error("Para enviar o Relatório de Plantão, escreva um resumo.");
         return;
       }
       if (resumo.length < 15) {
         toast.error(
-          "Para enviar o Relatorio de Plantao completo, o resumo deve conter pelo menos 15 caracteres.",
+          "Para enviar o Relatório de Plantão completo, o resumo deve conter pelo menos 15 caracteres.",
         );
         return;
       }
@@ -227,7 +259,7 @@ function RegistrarPage() {
 
     if (recordsToInsert.length === 0 && !handoverToInsert) {
       toast.error(
-        "Preencha pelo menos um cuidado ou relatorio de plantao para salvar.",
+        "Preencha pelo menos um cuidado ou relatório de plantão para salvar.",
       );
       return;
     }
@@ -286,7 +318,7 @@ function RegistrarPage() {
       navigate({ to: "/idosos/$elderId", params: { elderId } });
     } catch (err) {
       console.error(err);
-      toast.error("Nao foi possivel salvar os registros. Tente novamente.");
+      toast.error("Não foi possível salvar os registros. Tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -299,8 +331,8 @@ function RegistrarPage() {
           Registrar Cuidados do Paciente
         </h1>
         <p className="-mt-4 text-center text-sm text-muted-foreground">
-          Preencha abaixo as acoes de cuidado realizadas neste periodo. Deixe em
-          branco as secoes que nao foram executadas.
+          Preencha abaixo as ações de cuidado realizadas neste período. Deixe em
+          branco as seções que não foram executadas.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -372,7 +404,7 @@ function RegistrarPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="ps">Pressao sistolica</Label>
+                  <Label htmlFor="ps">Pressão sistólica</Label>
                   <Input
                     id="ps"
                     name="pressao_sistolica"
@@ -384,7 +416,7 @@ function RegistrarPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pd">Pressao diastolica</Label>
+                  <Label htmlFor="pd">Pressão diastólica</Label>
                   <Input
                     id="pd"
                     name="pressao_diastolica"
@@ -432,11 +464,11 @@ function RegistrarPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_sinais_vitais">Observacao / Nota</Label>
+                <Label htmlFor="notes_sinais_vitais">Observação / Nota</Label>
                 <Input
                   id="notes_sinais_vitais"
                   name="notes_sinais_vitais"
-                  placeholder="Descreva qualquer alteracao de sinais vitais..."
+                  placeholder="Descreva qualquer alteração de sinais vitais..."
                 />
               </div>
             </CardContent>
@@ -445,7 +477,7 @@ function RegistrarPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-base text-primary">
-                3. Medicacao (Opcional)
+                3. Medicação (Opcional)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -472,10 +504,10 @@ function RegistrarPage() {
                   checked={administrado}
                   onCheckedChange={(c) => setAdministrado(c === true)}
                 />
-                Medicacao administrada
+                Medicação administrada
               </label>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_medicacao">Observacao / Nota</Label>
+                <Label htmlFor="notes_medicacao">Observação / Nota</Label>
                 <Input
                   id="notes_medicacao"
                   name="notes_medicacao"
@@ -488,30 +520,30 @@ function RegistrarPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-base text-primary">
-                4. Alimentacao e Hidratacao (Opcional)
+                4. Alimentação e Hidratação (Opcional)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Refeicao</Label>
+                  <Label>Refeição</Label>
                   <Select name="refeicao" defaultValue="none">
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Nao registrado</SelectItem>
+                      <SelectItem value="none">Não registrado</SelectItem>
                       <SelectItem value="cafe da manha">
-                        Cafe da manha
+                        Café da manhã
                       </SelectItem>
-                      <SelectItem value="almoco">Almoco</SelectItem>
+                      <SelectItem value="almoco">Almoço</SelectItem>
                       <SelectItem value="lanche">Lanche</SelectItem>
                       <SelectItem value="jantar">Jantar</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Aceitacao</Label>
+                  <Label>Aceitação</Label>
                   <Select name="aceitacao" defaultValue="total">
                     <SelectTrigger>
                       <SelectValue />
@@ -539,7 +571,7 @@ function RegistrarPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_alimentacao">Observacao / Nota</Label>
+                <Label htmlFor="notes_alimentacao">Observação / Nota</Label>
                 <Input
                   id="notes_alimentacao"
                   name="notes_alimentacao"
@@ -552,7 +584,7 @@ function RegistrarPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-base text-primary">
-                5. Diurese / Eliminacoes (Opcional)
+                5. Diurese / Eliminações (Opcional)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -563,9 +595,9 @@ function RegistrarPage() {
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Nao registrado</SelectItem>
+                    <SelectItem value="none">Não registrado</SelectItem>
                     <SelectItem value="Sim">Sim</SelectItem>
-                    <SelectItem value="Nao">Nao</SelectItem>
+                    <SelectItem value="Nao">Não</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -584,13 +616,13 @@ function RegistrarPage() {
                       Com presenca de hematuria (sangue)
                     </SelectItem>
                     <SelectItem value="Outro">
-                      Outro (detalhar na observacao)
-                    </SelectItem>
+                        Outro (detalhar na observação)
+                      </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_diurese">Observacao / Nota</Label>
+                <Label htmlFor="notes_diurese">Observação / Nota</Label>
                 <Input
                   id="notes_diurese"
                   name="notes_diurese"
@@ -603,19 +635,19 @@ function RegistrarPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-base text-primary">
-                6. Alteracao de Comportamento (Opcional)
+                6. Alteração de Comportamento (Opcional)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Tipo de alteracao</Label>
+                <Label>Tipo de alteração</Label>
                 <Select name="tipo_ocorrencia" defaultValue="none">
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">
-                      Nenhuma alteracao registrada
+                      Nenhuma alteração registrada
                     </SelectItem>
                     <SelectItem value="humor">
                       Humor / estado emocional
@@ -641,11 +673,11 @@ function RegistrarPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_ocorrencia">Observacao / Nota</Label>
+                <Label htmlFor="notes_ocorrencia">Observação / Nota</Label>
                 <Input
                   id="notes_ocorrencia"
                   name="notes_ocorrencia"
-                  placeholder="Especifique a alteracao ou queixas..."
+                  placeholder="Especifique a alteração ou queixas..."
                 />
               </div>
             </CardContent>
@@ -654,20 +686,20 @@ function RegistrarPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-base text-primary">
-                7. Relatorio de Plantao / Passagem (Opcional)
+                7. Relatório de Plantão / Passagem (Opcional)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="resumo">
-                  Resumo do plantao (atividades, cuidados)
+                  Resumo do plantão (atividades, cuidados)
                 </Label>
                 <Textarea
                   id="resumo"
                   name="resumo_plantao"
                   maxLength={2000}
                   rows={4}
-                  placeholder="Ex.: O paciente passou o dia bem, tomou todos os remedios da manha, almocou toda a refeicao e realizou caminhada..."
+                  placeholder="Ex.: O paciente passou o dia bem, tomou todos os remédios da manhã, almoçou toda a refeição e realizou caminhada..."
                 />
               </div>
               <div className="space-y-1.5">
@@ -692,7 +724,7 @@ function RegistrarPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="intercorrencia">
-                  Intercorrencias do periodo (opcional)
+                  Intercorrências do período (opcional)
                 </Label>
                 <Input
                   id="intercorrencia"
@@ -701,11 +733,11 @@ function RegistrarPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="notes_plantao">Observacao / Nota</Label>
+                <Label htmlFor="notes_plantao">Observação / Nota</Label>
                 <Input
                   id="notes_plantao"
                   name="notes_plantao"
-                  placeholder="Informacoes adicionais para o colega..."
+                  placeholder="Informações adicionais para o colega..."
                 />
               </div>
             </CardContent>
@@ -714,7 +746,7 @@ function RegistrarPage() {
           <Card className="border-primary/25 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-base">
-                8. Assinatura facial (Obrigatorio)
+                8. Assinatura facial (Obrigatório)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -735,6 +767,12 @@ function RegistrarPage() {
               ? "Salvando registros..."
               : "Salvar todos os cuidados preenchidos"}
           </Button>
+
+          {caregiverLocationError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {caregiverLocationError}
+            </div>
+          )}
         </form>
       </div>
     </AppShell>

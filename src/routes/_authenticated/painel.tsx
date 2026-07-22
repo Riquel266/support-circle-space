@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { BellRing, Users, ClipboardList, HeartPulse, CheckCircle2, ClipboardPlus, FileDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BellRing, Users, ClipboardList, HeartPulse, CheckCircle2, ClipboardPlus, FileDown, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useRole } from "@/hooks/use-role";
 import { AppShell } from "@/components/AppShell";
@@ -24,7 +24,7 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 function PainelPage() {
   const { role, userId, isLoading } = useRole();
-  const [activeTab, setActiveTab] = useState<"supervisor" | "passagens">("supervisor");
+  const [activeTab, setActiveTab] = useState<"supervisor" | "passagens" | "localizacao">("supervisor");
 
   if (!isLoading && role !== "supervisor") {
     return (
@@ -63,14 +63,17 @@ function PainelPage() {
           <div className="flex justify-center mb-6">
             <div className="inline-flex flex-wrap justify-center rounded-xl bg-secondary p-1 border gap-1">
               {tabBtn("supervisor", "Painel Supervisor (Adm)")}
-              {tabBtn("passagens", "Passagens de Plantao")}
+              {tabBtn("passagens", "Passagens de Plantão")}
+              {tabBtn("localizacao", "Localização")}
             </div>
           </div>
 
           {activeTab === "supervisor" ? (
             <SupervisorDashboard />
-          ) : (
+          ) : activeTab === "passagens" ? (
             <HandoversTab />
+          ) : (
+            <LocationTab />
           )}
         </div>
       ) : (
@@ -133,7 +136,7 @@ function SupervisorDashboard() {
     if (id === userId) return userName || "Supervisor";
     return "Desconhecido";
   };
-  const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Idoso";
+  const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Paciente";
 
   const today = new Date().toDateString();
   const recordsToday = records?.filter((r: any) => new Date(r.created_at).toDateString() === today).length ?? 0;
@@ -146,10 +149,10 @@ function SupervisorDashboard() {
       <h1 className="font-display text-2xl font-bold">Painel do supervisor</h1>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard icon={Users} label="Idosos ativos" value={elders?.length ?? 0} />
+        <StatCard icon={Users} label="Pacientes ativos" value={elders?.length ?? 0} />
         <StatCard icon={ClipboardList} label="Registros hoje" value={recordsToday} />
         <StatCard icon={BellRing} label="Alertas abertos" value={alerts?.length ?? 0} highlight={(alerts?.length ?? 0) > 0} />
-        <StatCard icon={HeartPulse} label="Ultimos registros" value={records?.length ?? 0} />
+        <StatCard icon={HeartPulse} label="Últimos registros" value={records?.length ?? 0} />
       </div>
 
       <section>
@@ -163,7 +166,7 @@ function SupervisorDashboard() {
         ) : (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              Nenhum registro ainda. Cadastre idosos e cuidadores para comecar.
+              Nenhum registro ainda. Cadastre pacientes e cuidadores para começar.
             </CardContent>
           </Card>
         )}
@@ -294,7 +297,7 @@ function HandoversTab() {
 
     autoTable(doc, {
       startY: y,
-      head: [["Idoso", "Cuidador", "Data", "Hora", "Humor", "Resumo", "Intercorrências", "Nota"]],
+      head: [["Paciente", "Cuidador", "Data", "Hora", "Humor", "Resumo", "Intercorrências", "Nota"]],
       body: bodyRows,
       styles: { fontSize: 8, cellPadding: 4, valign: "top", overflow: "linebreak" },
       columnStyles: {
@@ -334,7 +337,7 @@ function HandoversTab() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="font-display text-2xl font-bold flex items-center gap-2">
           <ClipboardList className="h-6 w-6 text-primary" />
-          Passagens de Plantao
+          Passagens de Plantão
         </h1>
         <Badge variant="secondary">Exclusivo Supervisor</Badge>
       </div>
@@ -346,7 +349,7 @@ function HandoversTab() {
             <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="to">Ate</Label>
+            <Label htmlFor="to">Até</Label>
             <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" />
           </div>
           {(from || to) && (
@@ -368,7 +371,7 @@ function HandoversTab() {
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground text-sm">
-            Nenhuma passagem de plantao no periodo selecionado.
+            Nenhuma passagem de plantão no período selecionado.
           </CardContent>
         </Card>
       ) : (
@@ -380,8 +383,8 @@ function HandoversTab() {
               <div key={r.id} className="p-4 rounded-xl border bg-background/40 space-y-2">
                 <div className="flex justify-between items-start gap-2 border-b pb-2">
                   <div>
-                    <span className="text-[10px] text-muted-foreground block">Idoso</span>
-                    <span className="font-semibold text-xs text-foreground block">{elder?.full_name || "Idoso"}</span>
+                    <span className="text-[10px] text-muted-foreground block">Paciente</span>
+                    <span className="font-semibold text-xs text-foreground block">{elder?.full_name || "Paciente"}</span>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] text-muted-foreground block">Data e Hora</span>
@@ -400,7 +403,7 @@ function HandoversTab() {
                   </p>
                   {r.data?.intercorrencias && r.data.intercorrencias !== "nenhuma" && (
                     <p className="text-destructive font-semibold mt-1">
-                      Intercorrencias: {r.data.intercorrencias}
+                      Intercorrências: {r.data.intercorrencias}
                     </p>
                   )}
                   {r.data?.notes && <p className="text-muted-foreground mt-1">Nota: {r.data.notes}</p>}
@@ -423,7 +426,7 @@ function HandoversTab() {
                       doc.text("CuidarBem", marginX, 30);
                       doc.setFont("helvetica", "normal");
                       doc.setFontSize(10);
-                      doc.text("Passagem de Plantao", marginX, 48);
+                      doc.text("Passagem de Plantão", marginX, 48);
                       doc.setFontSize(9);
                       doc.text(formatDateTime(r.created_at), marginX, 62);
 
@@ -445,7 +448,7 @@ function HandoversTab() {
 
                       doc.setFont("helvetica", "bold");
                       doc.setFontSize(12);
-                      doc.text("Resumo do Plantao", marginX, y);
+                      doc.text("Resumo do Plantão", marginX, y);
                       y += 16;
                       doc.setFont("helvetica", "normal");
                       doc.setFontSize(10);
@@ -459,7 +462,7 @@ function HandoversTab() {
                         doc.setFont("helvetica", "bold");
                         doc.setTextColor(180, 40, 40);
                         doc.setFontSize(10);
-                        doc.text("Intercorrencias:", marginX, y);
+                        doc.text("Intercorrências:", marginX, y);
                         doc.setFont("helvetica", "normal");
                         doc.text(r.data.intercorrencias, marginX + 90, y);
                         y += 16;
@@ -467,7 +470,7 @@ function HandoversTab() {
                       }
 
                       if (r.data?.notes) {
-                        addField("Observacao:", r.data.notes);
+                        addField("Observação:", r.data.notes);
                       }
 
                       const pageCount = doc.getNumberOfPages();
@@ -475,7 +478,7 @@ function HandoversTab() {
                         doc.setPage(i);
                         doc.setFontSize(8);
                         doc.setTextColor(150, 150, 150);
-                        doc.text(`CuidarBem — Pagina ${i} de ${pageCount}`, pageWidth - marginX, doc.internal.pageSize.getHeight() - 20, { align: "right" });
+                        doc.text(`CuidarBem — Página ${i} de ${pageCount}`, pageWidth - marginX, doc.internal.pageSize.getHeight() - 20, { align: "right" });
                       }
 
                       const safeName = (elder?.full_name || "paciente").replace(/[^\p{L}\p{N}]+/gu, "_");
@@ -553,7 +556,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
     if (id === userId) return userName || "Supervisor";
     return "Desconhecido";
   };
-  const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Idoso";
+  const elderName = (id: string) => elders?.find((e: any) => e.id === id)?.full_name || "Paciente";
 
   return (
     <div className="space-y-6">
@@ -567,7 +570,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
       </div>
 
       <section>
-        <h2 className="mb-3 font-display text-lg font-bold">Idosos sob meus cuidados</h2>
+        <h2 className="mb-3 font-display text-lg font-bold">Pacientes sob meus cuidados</h2>
         {assignments && assignments.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {assignments.map((a: any) => {
@@ -584,7 +587,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0 text-sm text-muted-foreground">
-                      {elder.medical_notes ? elder.medical_notes.slice(0, 80) : "Ver historico completo"}
+                      {elder.medical_notes ? elder.medical_notes.slice(0, 80) : "Ver histórico completo"}
                     </CardContent>
                   </div>
                   <div className="p-4 pt-0 flex justify-end">
@@ -601,7 +604,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
         ) : (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              Nenhum idoso vinculado ainda. Peca ao seu supervisor para vincular voce.
+              Nenhum paciente vinculado ainda. Peça ao seu supervisor para vincular você.
             </CardContent>
           </Card>
         )}
@@ -610,7 +613,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
       <section className="bg-card border rounded-2xl p-5 shadow-sm">
         <h2 className="mb-3 font-display text-lg font-bold flex items-center gap-2">
           <HeartPulse className="h-5 w-5 text-primary animate-pulse" />
-          Observacoes em tempo real
+          Observações em tempo real
         </h2>
         {recentForMyElders && recentForMyElders.length > 0 ? (
           <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
@@ -626,24 +629,218 @@ function CaregiverDashboard({ userId }: { userId: string }) {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground italic bg-secondary/35 p-3 rounded-lg text-center">
-            Nenhuma observacao ou cuidado registrado em tempo real para os seus idosos.
+            Nenhuma observação ou cuidado registrado em tempo real para os seus pacientes.
           </p>
         )}
       </section>
 
       <section>
-        <h2 className="mb-3 font-display text-lg font-bold">Meus ultimos registros</h2>
+        <h2 className="mb-3 font-display text-lg font-bold">Meus últimos registros</h2>
         <div className="space-y-2">
           {records?.map((r: any) => <RecordCard key={r.id} record={r} showSelfie={false} />)}
           {(!records || records.length === 0) && (
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
-                Voce ainda nao fez registros hoje.
+                Você ainda não fez registros hoje.
               </CardContent>
             </Card>
           )}
         </div>
       </section>
     </div>
+  );
+}
+
+function LocationTab() {
+  const [locations, setLocations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { data: caregivers } = useQuery({
+    queryKey: ["caregivers"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL()}/caregivers`);
+      return res.json();
+    },
+  });
+
+  const fetchLocations = async () => {
+    try {
+      const res = await fetch(`${API_URL()}/caregiver-locations`);
+      const data = await res.json();
+      setLocations(data);
+    } catch {
+      // silent
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchLocations();
+    const interval = setInterval(fetchLocations, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const caregiverName = (id: string) =>
+    caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+
+  const caregiverPhoto = (id: string) =>
+    caregivers?.find((c: any) => c.id === id)?.photo_url || null;
+
+  const now = Date.now();
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="font-display text-2xl font-bold flex items-center gap-2">
+          <MapPin className="h-6 w-6 text-primary" />
+          Localização dos Cuidadores
+        </h1>
+        <Badge variant="secondary">Atualiza a cada 15s</Badge>
+      </div>
+
+      {locations.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="h-[400px] w-full bg-secondary relative">
+            <LocationMap locations={locations} caregivers={caregivers} />
+          </div>
+        </Card>
+      )}
+
+      <section>
+        <h2 className="mb-3 font-display text-lg font-bold">
+          Cuidadores ({locations.length})
+        </h2>
+        {loading ? (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground">
+              Carregando localizações...
+            </CardContent>
+          </Card>
+        ) : locations.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground">
+              Nenhuma localização registrada ainda. Os cuidadores precisam ter o GPS ativo no celular.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {locations.map((loc: any) => {
+              const diffMs = now - new Date(loc.updated_at).getTime();
+              const diffMin = Math.floor(diffMs / 60000);
+              const isRecent = diffMin < 5;
+              return (
+                <Card key={loc.caregiver_id} className={isRecent ? "border-success/50" : ""}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      {caregiverPhoto(loc.caregiver_id) ? (
+                        <img
+                          src={caregiverPhoto(loc.caregiver_id)}
+                          alt={caregiverName(loc.caregiver_id)}
+                          className="h-10 w-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-bold text-primary">
+                          {caregiverName(loc.caregiver_id).charAt(0)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm truncate">
+                          {caregiverName(loc.caregiver_id)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {isRecent ? (
+                            <span className="text-success">Ativo agora</span>
+                          ) : (
+                            <span>Há {diffMin} min</span>
+                          )}
+                        </p>
+                      </div>
+                      <a
+                        href={`https://www.google.com/maps?q=${loc.lat},${loc.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0"
+                      >
+                        <Button variant="ghost" size="sm" className="gap-1 text-xs">
+                          <MapPin className="h-3.5 w-3.5" />
+                          Abrir mapa
+                        </Button>
+                      </a>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground truncate">
+                      {loc.lat.toFixed(6)}, {loc.lng.toFixed(6)}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function LocationMap({ locations, caregivers }: { locations: any[]; caregivers: any[] }) {
+  const [MapContainer, setMapContainer] = useState<any>(null);
+  const [TileLayer, setTileLayer] = useState<any>(null);
+  const [Marker, setMarker] = useState<any>(null);
+  const [Popup, setPopup] = useState<any>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      import("react-leaflet"),
+      import("leaflet/dist/leaflet.css"),
+      import("leaflet"),
+    ]).then(([rl, _css, L]) => {
+      if (cancelled) return;
+      (window as any).L = L.default;
+      delete (L.default as any).Icon.Default.prototype._getIconUrl;
+      L.default.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      });
+      setMapContainer(() => rl.MapContainer);
+      setTileLayer(() => rl.TileLayer);
+      setMarker(() => rl.Marker);
+      setPopup(() => rl.Popup);
+      setReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!ready || !MapContainer) {
+    return <div className="flex h-full items-center justify-center text-muted-foreground text-sm">Carregando mapa...</div>;
+  }
+
+  const avgLat = locations.reduce((s, l) => s + l.lat, 0) / locations.length;
+  const avgLng = locations.reduce((s, l) => s + l.lng, 0) / locations.length;
+
+  const caregiverName = (id: string) =>
+    caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+
+  return (
+    <MapContainer
+      center={[avgLat, avgLng]}
+      zoom={13}
+      scrollWheelZoom={true}
+      style={{ height: "100%", width: "100%" }}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      {locations.map((loc: any) => (
+        <Marker key={loc.caregiver_id} position={[loc.lat, loc.lng]}>
+          <Popup>
+            <strong>{caregiverName(loc.caregiver_id)}</strong>
+            <br />
+            {new Date(loc.updated_at).toLocaleString("pt-BR")}
+          </Popup>
+        </Marker>
+      ))}
+    </MapContainer>
   );
 }

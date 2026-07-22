@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useRole } from "@/hooks/use-role";
+import { generateId } from "@/lib/utils";
+import { getCurrentPosition, isWithinRadius, haversineDistance } from "@/lib/geo";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,7 +43,7 @@ function formatDate(iso: string) {
 }
 
 function PresencaPage() {
-  const { userId } = useRole();
+  const { userId, userName } = useRole();
   const queryClient = useQueryClient();
   const [filterDate, setFilterDate] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -105,10 +107,134 @@ function PresencaPage() {
     onError: () => toast.error("Não foi possível excluir."),
   });
 
-  const caregiverName = (id: string) =>
-    id === userId
-      ? "Supervisor"
-      : caregivers?.find((c: any) => c.id === id)?.full_name || "Desconhecido";
+  const checkIn = useMutation({
+    mutationFn: async () => {
+      const record = {
+        id: generateId(),
+        caregiver_id: userId,
+        elder_id: null,
+        created_at: new Date().toISOString(),
+        departure_time: null,
+      };
+      const res = await fetch(`${API_URL()}/attendance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record),
+      });
+      if (!res.ok) throw new Error("Erro ao registrar entrada");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      toast.success("Entrada registrada!");
+    },
+    onError: () => toast.error("Não foi possível registrar entrada."),
+  });
+
+  const checkOut = useMutation({
+    mutationFn: async (recordId: string) => {
+      const res = await fetch(`${API_URL()}/attendance`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: recordId,
+          departure_time: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error("Erro ao registrar saída");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      toast.success("Saída registrada!");
+    },
+    onError: () => toast.error("Não foi possível registrar saída."),
+  });
+
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const [checkingGeo, setCheckingGeo] = useState(false);
+
+  const verifyLocationAndCheckIn = async () => {
+    setGeoError(null);
+    setCheckingGeo(true);
+
+    try {
+      const position = await getCurrentPosition();
+      const userLat = position.coords.latitude;
+      const userLng = position.coords.longitude;
+
+      const locations = (elders as any[])
+        .filter((e: any) => e.location_lat != null && e.location_lng != null)
+        .map((e: any) => ({
+          name: e.full_name,
+          lat: Number(e.location_lat),
+          lng: Number(e.location_lng),
+          radius: Number(e.location_radius) || 100,
+        }));
+
+      if (locations.length === 0) {
+        setGeoError("Nenhum paciente possui endereço cadastrado. Cadastre o endereço do paciente primeiro.");
+        setCheckingGeo(false);
+        return;
+      }
+
+      const withinAny = locations.some((loc) =>
+        isWithinRadius(userLat, userLng, loc.lat, loc.lng, loc.radius),
+      );
+
+      if (withinAny) {
+        checkIn.mutate();
+      } else {
+        const nearest = locations
+          .map((loc) => ({
+            ...loc,
+            dist: Math.round(
+              haversineDistance(userLat, userLng, loc.lat, loc.lng),
+            ),
+          }))
+          .sort((a, b) => a.dist - b.dist)[0];
+        setGeoError(
+          `Você está a ~${nearest.dist}m de "${nearest.name}" (raio: ${nearest.radius}m). Dirija-se ao local para registrar presença.`,
+        );
+      }
+    } catch (err: any) {
+      if (err.code === 1) {
+        setGeoError("Permissão de localização negada. Ative a localização no navegador.");
+      } else if (err.code === 2) {
+        setGeoError("Não foi possível obter sua localização. Verifique o GPS.");
+      } else if (err.code === 3) {
+        setGeoError("Tempo esgotado ao obter localização. Tente novamente.");
+      } else {
+        setGeoError(err.message || "Erro ao verificar localização.");
+      }
+    }
+    setCheckingGeo(false);
+  };
+
+  const supervisorActive = (attendance as any[]).find(
+    (a: any) => a.caregiver_id === userId && !a.departure_time,
+  );
+
+  const handleSupervisorCheckIn = () => {
+    if (supervisorActive) {
+      toast.error("Você já está registrado como presente. Registre saída primeiro.");
+      return;
+    }
+    verifyLocationAndCheckIn();
+  };
+
+  const handleSupervisorCheckOut = () => {
+    if (!supervisorActive) {
+      toast.error("Nenhuma presença ativa encontrada.");
+      return;
+    }
+    checkOut.mutate(supervisorActive.id);
+  };
+
+  const caregiverName = (id: string) => {
+    const found = caregivers?.find((c: any) => c.id === id);
+    if (found) return found.full_name;
+    if (id === userId) return userName || "Supervisor";
+    return "Desconhecido";
+  };
 
   const elderName = (id: string) =>
     elders?.find((e: any) => e.id === id)?.full_name || "";
@@ -154,20 +280,30 @@ function PresencaPage() {
     const marginX = 15;
     const now = new Date();
 
-    doc.setFontSize(18);
-    doc.setTextColor(34, 102, 68);
+    doc.setFillColor(34, 102, 68);
+    doc.rect(0, 0, pageWidth, 30, "F");
+    doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
-    doc.text("Relatório de Presença", marginX, 20);
-
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
+    doc.setFontSize(16);
+    doc.text("CuidarBem", marginX, 12);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Relatório de Presença", marginX, 22);
+
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Supervisor: ${userName || "—"}`, marginX, 38);
     const subtitle = filterDate
       ? `Filtro: ${formatDate(new Date(filterDate + "T12:00:00").toISOString())}`
       : `Todos os registros — Gerado em ${now.toLocaleDateString("pt-BR")} às ${now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
-    doc.text(subtitle, marginX, 28);
+    doc.text(subtitle, marginX, 44);
 
-    let y = 35;
+    doc.setFontSize(9);
+    doc.setTextColor(40, 40, 40);
+    const summaryText = `Total: ${filtered.length} registro(s) | Presentes hoje: ${activeNow}`;
+    doc.text(summaryText, marginX, 50);
+
+    let y = 56;
 
     const bodyRows = filtered.map((a: any) => {
       const dep = a.departure_time ? new Date(a.departure_time) : null;
@@ -192,7 +328,7 @@ function PresencaPage() {
 
     autoTable(doc, {
       startY: y,
-      head: [["Cuidador", "Idoso", "Data", "Entrada", "Saída", "Status", "Duração"]],
+      head: [["Cuidador", "Paciente", "Data", "Entrada", "Saída", "Status", "Duração"]],
       body: bodyRows,
       styles: { fontSize: 9, cellPadding: 4, valign: "middle" },
       columnStyles: {
@@ -217,7 +353,7 @@ function PresencaPage() {
           pageH - 10,
         );
         doc.text(
-          "Relatório de Presença",
+          `Relatório gerado por ${userName || "Supervisor"}`,
           pageWidth - marginX,
           pageH - 10,
           { align: "right" },
@@ -261,6 +397,48 @@ function PresencaPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-6 border-primary/20">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm">{userName || "Supervisor"}</p>
+              {supervisorActive ? (
+                <p className="text-xs text-muted-foreground">
+                  Presente desde {formatTime(supervisorActive.created_at)}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Fora do posto</p>
+              )}
+            </div>
+            {supervisorActive ? (
+              <Button
+                variant="outline"
+                onClick={handleSupervisorCheckOut}
+                disabled={checkOut.isPending}
+                className="gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="h-4 w-4" />
+                {checkOut.isPending ? "Registrando..." : "Registrar Saída"}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSupervisorCheckIn}
+                disabled={checkIn.isPending || checkingGeo}
+                className="gap-1.5 bg-success hover:bg-success/90"
+              >
+                <LogIn className="h-4 w-4" />
+                {checkingGeo ? "Verificando localização..." : checkIn.isPending ? "Registrando..." : "Registrar Entrada"}
+              </Button>
+            )}
+          </div>
+          {geoError && (
+            <p className="mt-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+              {geoError}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="mb-6">
         <CardContent className="p-4">

@@ -4,11 +4,14 @@ import { HeartHandshake, LayoutDashboard, Users, ClipboardPlus, UserCog, LogOut,
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useRole } from "@/hooks/use-role";
+import { useLocationTracker } from "@/hooks/use-location-tracker";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role } = useRole();
+  const { role, userId } = useRole();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  useLocationTracker(userId);
 
   const handleSignOut = async () => {
     await queryClient.cancelQueries();

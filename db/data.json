@@ -7,7 +7,11 @@
       "medical_notes": null,
       "photo_url": null,
       "active": true,
-      "created_at": "2026-07-13T17:59:59.499Z"
+      "created_at": "2026-07-13T17:59:59.499Z",
+      "location_address": "Rua Santa Gertrudes, Vila Carrão, Carrão, São Paulo, Região Sudeste, 03408-020, Brasil",
+      "location_lat": -23.5475608,
+      "location_lng": -46.5523897,
+      "location_radius": 500
     },
     {
       "id": "8ba92d0d-0101-42fe-8dbf-b3c4ace7b5f5",
@@ -16,7 +20,24 @@
       "medical_notes": "DEMÊNCIA, PARKSION",
       "photo_url": null,
       "active": true,
-      "created_at": "2026-07-15T02:53:19.783Z"
+      "created_at": "2026-07-15T02:53:19.783Z",
+      "location_address": "Avenida Adutora do Rio Claro 500 , Conjunto Habitacional Teotônio Vilela, Sapopemba, São Paulo, Região Sudeste, 03988-000, Brasil",
+      "location_lat": -23.6057508,
+      "location_lng": -46.507789,
+      "location_radius": 500
+    },
+    {
+      "id": "cba31f3c-2f6a-4438-91b8-3408001234e1",
+      "full_name": "José Bonifacio",
+      "birth_date": "1974-04-12",
+      "medical_notes": "AVC, Acamado, Diabetes tipo A",
+      "photo_url": null,
+      "location_address": "Avenida do Oratório, São Lucas, São Paulo, Região Sudeste, 03282-000, Brasil",
+      "location_lat": -23.5841813,
+      "location_lng": -46.5579241,
+      "location_radius": 500,
+      "active": true,
+      "created_at": "2026-07-22T15:04:16.074Z"
     }
   ],
   "caregivers": [
@@ -130,18 +151,25 @@
   ],
   "attendance": [
     {
-      "id": "134072f2-8cae-4cd8-af6a-28e88da93aad",
-      "caregiver_id": "7b4729d9-c170-4e47-8275-a499d5f27987",
-      "elder_id": "060351bf-6794-4520-a8aa-cbb3e74b8db1",
-      "created_at": "2026-07-13T22:00:00.000Z",
-      "departure_time": "2026-07-14T19:58:00.000Z"
-    },
-    {
-      "id": "04d87c87-2372-4660-939b-52b8a44ce4be",
+      "id": "4aaf5414-7a05-48fd-95fb-8e1758b57117",
       "caregiver_id": "7b4729d9-c170-4e47-8275-a499d5f27987",
       "elder_id": "8ba92d0d-0101-42fe-8dbf-b3c4ace7b5f5",
-      "created_at": "2026-07-15T03:02:37.801Z",
-      "departure_time": "2026-07-15T03:19:14.508Z"
+      "created_at": "2026-07-22T15:33:18.220Z",
+      "departure_time": null
+    }
+  ],
+  "caregiver_locations": [
+    {
+      "caregiver_id": "7b4729d9-c170-4e47-8275-a499d5f27987",
+      "lat": -23.6035869,
+      "lng": -46.5083211,
+      "updated_at": "2026-07-22T15:36:32.578Z"
+    },
+    {
+      "caregiver_id": "0e7874c3-a937-4158-a0ab-949991be81b9",
+      "lat": -23.6036365,
+      "lng": -46.5082862,
+      "updated_at": "2026-07-22T15:15:53.984Z"
     }
   ]
 }

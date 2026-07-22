@@ -6,6 +6,7 @@ import {
   LogIn,
   LogOut,
 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { generateId } from "@/lib/utils";
 import { useRole } from "@/hooks/use-role";
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { calcAge } from "@/lib/care";
+import { getCurrentPosition, isWithinRadius, haversineDistance } from "@/lib/geo";
 
 const API_URL = () => `/api`;
 
@@ -71,6 +73,43 @@ function CuidadorElderView() {
   const hasRecordForThisElder = todayRecords.some(
     (a: any) => a.elder_id === elderId,
   );
+
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const [checkingGeo, setCheckingGeo] = useState(false);
+
+  const verifyLocationAndCheckIn = async () => {
+    setGeoError(null);
+    setCheckingGeo(true);
+    try {
+      if (elder?.location_lat && elder?.location_lng) {
+        const position = await getCurrentPosition();
+        const userLat = position.coords.latitude;
+        const userLng = position.coords.longitude;
+        const elderLat = Number(elder.location_lat);
+        const elderLng = Number(elder.location_lng);
+        const radius = Number(elder.location_radius) || 100;
+
+        if (!isWithinRadius(userLat, userLng, elderLat, elderLng, radius)) {
+          const distance = haversineDistance(userLat, userLng, elderLat, elderLng);
+          const msg = `Você está a ~${Math.round(distance)}m do paciente "${elder.full_name}". Dirija-se ao local (até ${radius}m) para registrar presença.`;
+          setGeoError(msg);
+          toast.error(msg);
+          setCheckingGeo(false);
+          return;
+        }
+      }
+      checkIn.mutate();
+    } catch (err: any) {
+      let msg = "Erro ao verificar localização.";
+      if (err.code === 1) msg = "Permissão de localização negada. Ative a localização no navegador.";
+      else if (err.code === 2) msg = "Não foi possível obter sua localização. Verifique o GPS.";
+      else if (err.code === 3) msg = "Tempo esgotado ao obter localização. Tente novamente.";
+      else msg = err.message || msg;
+      setGeoError(msg);
+      toast.error(msg);
+    }
+    setCheckingGeo(false);
+  };
 
   const checkIn = useMutation({
     mutationFn: async () => {
@@ -208,16 +247,21 @@ function CuidadorElderView() {
                   Presença já registrada hoje para este paciente.
                 </p>
               ) : (
+                <>
                 <Button
                   variant="default"
                   size="lg"
                   className="w-full max-w-xs gap-2 bg-success hover:bg-success/90"
-                  onClick={() => checkIn.mutate()}
-                  disabled={checkIn.isPending}
+                  onClick={verifyLocationAndCheckIn}
+                  disabled={checkIn.isPending || checkingGeo}
                 >
                   <LogIn className="h-4 w-4" />
-                  {checkIn.isPending ? "Registrando..." : "Registrar Entrada"}
+                  {checkingGeo ? "Verificando localização..." : checkIn.isPending ? "Registrando..." : "Registrar Entrada"}
                 </Button>
+                {geoError && (
+                  <p className="mt-2 w-full max-w-xs text-center text-sm text-destructive">{geoError}</p>
+                )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -225,7 +269,7 @@ function CuidadorElderView() {
       ) : (
         <Card className="mb-6">
           <CardContent className="p-6 text-center text-muted-foreground">
-            Paciente nao encontrado.
+            Paciente não encontrado.
           </CardContent>
         </Card>
       )}
@@ -233,7 +277,7 @@ function CuidadorElderView() {
   );
 }
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   BellRing,
   CalendarIcon,
@@ -322,7 +366,7 @@ function SupervisorElderView() {
       });
     } catch (e) {
       console.error(e);
-      toast.error("Nao foi possivel gerar o relatorio.");
+      toast.error("Não foi possível gerar o relatório.");
     }
   };
 
@@ -469,8 +513,8 @@ function SupervisorElderView() {
                   <Button variant="outline" className="gap-2">
                     <CalendarIcon className="h-4 w-4" />
                     {fromDate || toDate
-                      ? "Periodo selecionado"
-                      : "Filtrar periodo"}
+                      ? "Período selecionado"
+                      : "Filtrar período"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-64 space-y-3">
@@ -510,7 +554,7 @@ function SupervisorElderView() {
                 </PopoverContent>
               </Popover>
               <Button onClick={handleDownload} className="gap-2">
-                <FileDown className="h-4 w-4" /> Baixar relatorio PDF
+                <FileDown className="h-4 w-4" /> Baixar relatório PDF
               </Button>
             </div>
           </CardContent>
@@ -518,7 +562,7 @@ function SupervisorElderView() {
       ) : (
         <Card className="mb-6">
           <CardContent className="p-6 text-center text-muted-foreground">
-            Paciente nao encontrado.
+            Paciente não encontrado.
           </CardContent>
         </Card>
       )}
@@ -573,7 +617,7 @@ function SupervisorElderView() {
 
       <section>
         <h2 className="mb-3 font-display text-lg font-bold">
-          Historico de cuidados
+          Histórico de cuidados
         </h2>
         <div className="space-y-3">
           {filteredRecords.map((r: any) => (
@@ -600,7 +644,7 @@ function SupervisorElderView() {
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
                 {fromDate || toDate
-                  ? "Nenhum registro no periodo selecionado."
+                  ? "Nenhum registro no período selecionado."
                   : "Nenhum registro ainda."}
               </CardContent>
             </Card>

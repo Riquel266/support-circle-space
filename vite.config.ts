@@ -12,7 +12,7 @@ export default defineConfig({
   },
   vite: {
     server: {
-      host: true,
+      host: "0.0.0.0",
       allowedHosts: true,
       proxy: {
         "/api": {

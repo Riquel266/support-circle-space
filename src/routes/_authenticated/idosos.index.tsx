@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { UserPlus, ChevronRight, Camera, Search, Trash2 } from "lucide-react";
+import { UserPlus, ChevronRight, Camera, Search, Trash2, Pencil, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useRole } from "@/hooks/use-role";
 import { AppShell } from "@/components/AppShell";
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { calcAge } from "@/lib/care";
 import { generateId } from "@/lib/utils";
+import { AddressSearch } from "@/components/AddressSearch";
 
 const API_URL = () => `/api`;
 
@@ -30,8 +31,15 @@ function IdososPage() {
   const { role } = useRole();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingElder, setEditingElder] = useState<any>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [editPhotoUrl, setEditPhotoUrl] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [addAddress, setAddAddress] = useState("");
+  const [addCoords, setAddCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [editAddress, setEditAddress] = useState("");
+  const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data: elders } = useQuery({
     queryKey: ["elders-list"],
@@ -50,6 +58,10 @@ function IdososPage() {
       birth_date: string | null;
       medical_notes: string | null;
       photo_url: string | null;
+      location_address: string | null;
+      location_lat: number | null;
+      location_lng: number | null;
+      location_radius: number;
     }) => {
       const newElder = {
         id: generateId(),
@@ -71,7 +83,7 @@ function IdososPage() {
       setOpen(false);
     },
     onError: (err: Error) =>
-      toast.error(err.message || "Nao foi possivel cadastrar."),
+      toast.error(err.message || "Não foi possível cadastrar."),
   });
 
   const deleteElder = useMutation({
@@ -83,10 +95,40 @@ function IdososPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["elders-list"] });
-      toast.success("Paciente excluido!");
+      toast.success("Paciente excluído!");
     },
     onError: (err: Error) =>
-      toast.error(err.message || "Nao foi possivel excluir."),
+      toast.error(err.message || "Não foi possível excluir."),
+  });
+
+  const updateElder = useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      full_name: string;
+      birth_date: string | null;
+      medical_notes: string | null;
+      photo_url: string | null;
+      location_address: string | null;
+      location_lat: number | null;
+      location_lng: number | null;
+      location_radius: number;
+    }) => {
+      const res = await fetch(`${API_URL()}/elders`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Erro ao atualizar.");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["elders-list"] });
+      toast.success("Paciente atualizado!");
+      setEditOpen(false);
+      setEditingElder(null);
+      setEditPhotoUrl(null);
+    },
+    onError: (err: Error) =>
+      toast.error(err.message || "Não foi possível atualizar."),
   });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +146,8 @@ function IdososPage() {
     setOpen(isOpen);
     if (!isOpen) {
       setPhotoUrl(null);
+      setAddAddress("");
+      setAddCoords(null);
     }
   };
 
@@ -120,7 +164,47 @@ function IdososPage() {
       birth_date: String(form.get("birth_date") ?? "") || null,
       medical_notes: String(form.get("medical_notes") ?? "").trim() || null,
       photo_url: photoUrl,
+      location_address: addAddress || null,
+      location_lat: addCoords?.lat ?? null,
+      location_lng: addCoords?.lng ?? null,
+      location_radius: Number(form.get("location_radius")) || 100,
     });
+  };
+
+  const handleEdit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingElder) return;
+    const form = new FormData(e.currentTarget);
+    const name = String(form.get("full_name") ?? "").trim();
+    if (name.length < 2) {
+      toast.error("Informe o nome do paciente.");
+      return;
+    }
+    updateElder.mutate({
+      id: editingElder.id,
+      full_name: name,
+      birth_date: String(form.get("birth_date") ?? "") || null,
+      medical_notes: String(form.get("medical_notes") ?? "").trim() || null,
+      photo_url: editPhotoUrl,
+      location_address: editAddress || null,
+      location_lat: editCoords?.lat ?? null,
+      location_lng: editCoords?.lng ?? null,
+      location_radius: Number(form.get("location_radius")) || 100,
+    });
+  };
+
+  const openEdit = (elder: any, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingElder(elder);
+    setEditPhotoUrl(elder.photo_url || null);
+    setEditAddress(elder.location_address || "");
+    setEditCoords(
+      elder.location_lat && elder.location_lng
+        ? { lat: Number(elder.location_lat), lng: Number(elder.location_lng) }
+        : null
+    );
+    setEditOpen(true);
   };
 
   return (
@@ -128,6 +212,7 @@ function IdososPage() {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Pacientes</h1>
         {role === "supervisor" && (
+          <>
           <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
               <Button>
@@ -188,15 +273,35 @@ function IdososPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="elder-notes">
-                    Condicoes / observacoes medicas
+                    Condições / observações médicas
                   </Label>
                   <Textarea
                     id="elder-notes"
                     name="medical_notes"
                     maxLength={2000}
                     rows={3}
-                    placeholder="Ex.: Hipertensao, diabetes tipo 2..."
+                    placeholder="Ex.: Hipertensão, diabetes tipo 2..."
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5" />
+                    Localização (onde o cuidador deve estar para registrar presença)
+                  </Label>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Endereço</Label>
+                    <AddressSearch
+                      value={addAddress}
+                      onChange={setAddAddress}
+                      onCoordinates={(lat, lng) => setAddCoords({ lat, lng })}
+                      placeholder="Rua, número, bairro, cidade"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="elder-radius" className="text-xs text-muted-foreground">Raio permitido (metros)</Label>
+                    <Input id="elder-radius" name="location_radius" type="number" min="10" max="5000" defaultValue={100} />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">O cuidador só poderá registrar presença dentro deste raio do endereço informado.</p>
                 </div>
                 <Button
                   type="submit"
@@ -208,6 +313,78 @@ function IdososPage() {
               </form>
             </DialogContent>
           </Dialog>
+          <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) { setEditingElder(null); setEditPhotoUrl(null); setEditAddress(""); setEditCoords(null); } }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-display">Editar paciente</DialogTitle>
+              </DialogHeader>
+              {editingElder && (
+                <form onSubmit={handleEdit} className="space-y-4">
+                  <div className="flex flex-col items-center space-y-1.5">
+                    <Label className="self-start">Foto do paciente</Label>
+                    <label className="relative flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-muted-foreground/30 bg-secondary transition-colors hover:border-primary/50">
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setEditPhotoUrl(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
+                      {editPhotoUrl ? (
+                        <img src={editPhotoUrl} alt="Preview" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-center text-xs text-muted-foreground">
+                          <Camera className="h-6 w-6 text-muted-foreground" />
+                          <span>Adicionar</span>
+                        </div>
+                      )}
+                    </label>
+                    {editPhotoUrl && (
+                      <button type="button" onClick={() => setEditPhotoUrl(null)} className="mt-1 text-xs text-destructive hover:underline">
+                        Remover foto
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-elder-name">Nome completo</Label>
+                    <Input id="edit-elder-name" name="full_name" required maxLength={100} defaultValue={editingElder.full_name} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-elder-birth">Data de nascimento</Label>
+                    <Input id="edit-elder-birth" name="birth_date" type="date" defaultValue={editingElder.birth_date || ""} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-elder-notes">Condições / observações médicas</Label>
+                    <Textarea id="edit-elder-notes" name="medical_notes" maxLength={2000} rows={3} defaultValue={editingElder.medical_notes || ""} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5" />
+                      Localização
+                    </Label>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Endereço</Label>
+                      <AddressSearch
+                        value={editAddress}
+                        onChange={setEditAddress}
+                        onCoordinates={(lat, lng) => setEditCoords({ lat, lng })}
+                        placeholder="Rua, número, bairro, cidade"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Raio permitido (metros)</Label>
+                      <Input name="location_radius" type="number" min="10" max="5000" defaultValue={editingElder.location_radius || 100} />
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={updateElder.isPending}>
+                    {updateElder.isPending ? "Salvando..." : "Salvar alterações"}
+                  </Button>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+          </>
         )}
       </div>
 
@@ -255,20 +432,30 @@ function IdososPage() {
                     </p>
                   </div>
                   {role === "supervisor" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (window.confirm(`Excluir ${elder.full_name}?`)) {
-                          deleteElder.mutate(elder.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary"
+                        onClick={(e) => openEdit(elder, e)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (window.confirm(`Excluir ${elder.full_name}?`)) {
+                            deleteElder.mutate(elder.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </CardContent>
