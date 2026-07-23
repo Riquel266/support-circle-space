@@ -1,6 +1,109 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { randomUUID, createHmac, randomBytes, pbkdf2Sync } from "crypto";
+
+// ── Interfaces ──────────────────────────────────────────────────────
+
+interface Elder {
+  id: string;
+  full_name: string;
+  birth_date?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  phone?: string;
+  photo_url?: string;
+  notes?: string;
+  created_at?: string;
+}
+
+interface Caregiver {
+  id: string;
+  full_name: string;
+  email: string;
+  password_hash?: string;
+  role: "cuidador" | "supervisor";
+  phone?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  photo_url?: string;
+  created_at?: string;
+}
+
+interface Assignment {
+  id: string;
+  caregiver_id: string;
+  elder_id: string;
+  created_at?: string;
+}
+
+interface Record {
+  id: string;
+  elder_id: string;
+  caregiver_id: string;
+  type: string;
+  value?: string;
+  notes?: string;
+  photo_url?: string;
+  lat?: number;
+  lng?: number;
+  created_at?: string;
+}
+
+interface Attendance {
+  id: string;
+  caregiver_id: string;
+  elder_id?: string;
+  type: "check_in" | "check_out";
+  lat?: number;
+  lng?: number;
+  created_at?: string;
+}
+
+interface CompanyData {
+  elders: Elder[];
+  caregivers: Caregiver[];
+  assignments: Assignment[];
+  records: Record[];
+  attendance: Attendance[];
+  locations?: any[];
+}
+
+interface Subscription {
+  plan: "trial" | "premium";
+  status: "active" | "expired" | "inactive";
+  trialStartedAt?: string;
+  trialEndsAt?: string;
+  currentPeriodStart?: string;
+  currentPeriodEnd?: string;
+  stripeSubscriptionId?: string;
+  stripeCustomerId?: string;
+  paymentGateway?: string;
+  gatewaySubscriptionId?: string;
+}
+
+interface Company {
+  id: string;
+  name: string;
+  slug: string;
+  active: boolean;
+  createdAt: string;
+  subscription?: Subscription;
+}
+
+interface CompaniesData {
+  companies: Company[];
+}
+
+interface SuperAdmin {
+  id: string;
+  email: string;
+  name: string;
+  password: string;
+}
+
+// ── DB setup ────────────────────────────────────────────────────────
 
 const DB_DIR = import.meta.dir;
 const DB_FILE = join(DB_DIR, "data.json");
@@ -11,6 +114,19 @@ const COMPANIES_DIR = join(DB_DIR, "companies");
 if (!existsSync(COMPANIES_DIR)) {
   mkdirSync(COMPANIES_DIR, { recursive: true });
 }
+
+// ── Input sanitization ──────────────────────────────────────────────
+
+function sanitize(str: string): string {
+  if (!str) return str;
+  return str
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
+// ── DB helpers ──────────────────────────────────────────────────────
 
 function readDb() {
   try {
@@ -35,7 +151,7 @@ function writeDb(data: any) {
   writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-function readSuperAdminData(): { admins: Array<{ id: string; email: string; name: string; password: string }> } {
+function readSuperAdminData(): { admins: SuperAdmin[] } {
   try {
     if (existsSync(SUPER_ADMIN_FILE)) {
       return JSON.parse(readFileSync(SUPER_ADMIN_FILE, "utf-8"));
@@ -46,7 +162,7 @@ function readSuperAdminData(): { admins: Array<{ id: string; email: string; name
   return { admins: [] };
 }
 
-function readCompaniesData(): { companies: Array<{ id: string; name: string; slug: string; active: boolean; createdAt: string }> } {
+function readCompaniesData(): CompaniesData {
   try {
     if (existsSync(COMPANIES_FILE)) {
       return JSON.parse(readFileSync(COMPANIES_FILE, "utf-8"));
@@ -57,7 +173,7 @@ function readCompaniesData(): { companies: Array<{ id: string; name: string; slu
   return { companies: [] };
 }
 
-function writeCompaniesData(data: { companies: Array<{ id: string; name: string; slug: string; active: boolean; createdAt: string }> }) {
+function writeCompaniesData(data: CompaniesData) {
   writeFileSync(COMPANIES_FILE, JSON.stringify(data, null, 2));
 }
 
@@ -65,7 +181,7 @@ function isValidUUID(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
-function readCompanyData(companyId: string): any {
+function readCompanyData(companyId: string): CompanyData {
   if (!isValidUUID(companyId)) {
     return { elders: [], caregivers: [], assignments: [], records: [], attendance: [], caregiver_locations: [] };
   }
@@ -80,7 +196,7 @@ function readCompanyData(companyId: string): any {
   return { elders: [], caregivers: [], assignments: [], records: [], attendance: [], caregiver_locations: [] };
 }
 
-function writeCompanyData(companyId: string, data: any) {
+function writeCompanyData(companyId: string, data: CompanyData) {
   if (!isValidUUID(companyId)) return;
   const filePath = join(COMPANIES_DIR, `${companyId}.json`);
   writeFileSync(filePath, JSON.stringify(data, null, 2));
@@ -119,7 +235,11 @@ function migratePassword(password: string, storedHash: string): string | null {
 
 // ── JWT ───────────────────────────────────────────────────────────
 
-const JWT_SECRET = process.env.JWT_SECRET || "cuidarbem-dev-secret-2026";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is required.");
+  process.exit(1);
+}
 
 function createToken(payload: { id: string; role: string; companyId?: string }): string {
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
@@ -229,10 +349,10 @@ async function resolveLocation(body: any) {
 
 // ── Subscription helpers ─────────────────────────────────────────
 
-function getCompanySubscription(companyId: string | null) {
+function getCompanySubscription(companyId: string | null): Subscription | null {
   if (!companyId) return null;
   const companiesData = readCompaniesData();
-  const company = companiesData.companies.find((c: any) => c.id === companyId);
+  const company = companiesData.companies.find((c) => c.id === companyId);
   if (!company) return null;
   return company.subscription || null;
 }
@@ -247,19 +367,18 @@ function isLocationAllowed(companyId: string | null): boolean {
   return sub.status === "active";
 }
 
-function updateCompanySubscription(companyId: string, update: Record<string, any>) {
+function updateCompanySubscription(companyId: string, update: Partial<Subscription>): void {
   const companiesData = readCompaniesData();
-  const idx = companiesData.companies.findIndex((c: any) => c.id === companyId);
-  if (idx === -1) return false;
+  const idx = companiesData.companies.findIndex((c) => c.id === companyId);
+  if (idx === -1) return;
   companiesData.companies[idx].subscription = {
     ...companiesData.companies[idx].subscription,
     ...update,
   };
   writeCompaniesData(companiesData);
-  return true;
 }
 
-function createTrialSubscription() {
+function createTrialSubscription(): Subscription {
   const now = new Date();
   const endsAt = new Date(now.getTime() + 30 * 86400000);
   return {
@@ -267,10 +386,10 @@ function createTrialSubscription() {
     status: "active",
     trialStartedAt: now.toISOString(),
     trialEndsAt: endsAt.toISOString(),
-    paymentGateway: null,
-    gatewaySubscriptionId: null,
-    currentPeriodStart: null,
-    currentPeriodEnd: null,
+    paymentGateway: undefined,
+    gatewaySubscriptionId: undefined,
+    currentPeriodStart: undefined,
+    currentPeriodEnd: undefined,
   };
 }
 
@@ -298,6 +417,7 @@ Bun.serve({
       if (pathname === "/api/admin/login" && method === "POST") {
         const { email, password } = await req.json();
         if (!email || !password) return ok({ error: "Email e senha obrigatorios" }, 400, req);
+        if (password.length < 6) return ok({ error: "Senha deve ter pelo menos 6 caracteres" }, 400, req);
 
         const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
           || req.headers.get("x-real-ip")
@@ -342,7 +462,7 @@ Bun.serve({
         const companiesData = readCompaniesData();
         companiesData.companies.push({
           id: companyId,
-          name: companyName,
+          name: sanitize(companyName),
           slug: companySlug || companyName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
           active: true,
           createdAt: new Date().toISOString(),
@@ -350,7 +470,7 @@ Bun.serve({
         });
         writeCompaniesData(companiesData);
 
-        const emptyData: any = {
+        const emptyData: CompanyData = {
           elders: [],
           caregivers: [],
           assignments: [],
@@ -362,7 +482,7 @@ Bun.serve({
         if (supervisorEmail && supervisorPassword) {
           emptyData.caregivers.push({
             id: randomUUID(),
-            full_name: supervisorName,
+            full_name: sanitize(supervisorName),
             email: supervisorEmail,
             phone: null,
             role: "supervisor",
@@ -394,7 +514,7 @@ Bun.serve({
           companiesData.companies[idx].active = body.active;
         }
         if (body.name !== undefined) {
-          companiesData.companies[idx].name = body.name;
+          companiesData.companies[idx].name = sanitize(body.name);
         }
         if (body.slug !== undefined) {
           companiesData.companies[idx].slug = body.slug;
@@ -420,6 +540,7 @@ Bun.serve({
       if (pathname === "/api/auth/login" && method === "POST") {
         const { email, password, companySlug } = await req.json();
         if (!email || !password) return ok({ error: "Email e senha obrigatorios" }, 400, req);
+        if (password.length < 6) return ok({ error: "Senha deve ter pelo menos 6 caracteres" }, 400, req);
 
         const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
           || req.headers.get("x-real-ip")
@@ -431,14 +552,14 @@ Bun.serve({
 
         if (companySlug) {
           const companiesData = readCompaniesData();
-          const company = companiesData.companies.find((c: any) => c.slug === companySlug && c.active);
+          const company = companiesData.companies.find((c) => c.slug === companySlug && c.active);
           if (!company) {
             return ok({ error: "Empresa nao encontrada ou inativa" }, 404, req);
           }
           const companyDb = readCompanyData(company.id);
-          const caregiver = companyDb.caregivers.find((c: any) => c.email === email && verifyPassword(password, c.password_hash));
+          const caregiver = companyDb.caregivers.find((c) => c.email === email && verifyPassword(password, c.password_hash || ""));
           if (caregiver) {
-            const newHash = migratePassword(password, caregiver.password_hash);
+            const newHash = migratePassword(password, caregiver.password_hash || "");
             if (newHash) {
               caregiver.password_hash = newHash;
               writeCompanyData(company.id, companyDb);
@@ -468,17 +589,6 @@ Bun.serve({
           }, 200, req);
         }
 
-        // Legacy backdoor - TODO: remove in production
-        const supervisorEmail = "admin@cuidarbem.com";
-        const supervisorPassword = "admin123";
-        if (email === supervisorEmail && password === supervisorPassword) {
-          const token = createToken({ id: "0e7874c3-a937-4158-a0ab-949991be81b9", role: "supervisor" });
-          return ok({
-            token,
-            user: { id: "0e7874c3-a937-4158-a0ab-949991be81b9", full_name: "Supervisor", email, role: "supervisor" },
-          }, 200, req);
-        }
-
         return ok({ error: "Email ou senha invalidos" }, 401, req);
       }
 
@@ -495,15 +605,15 @@ Bun.serve({
             if (!isValidUUID(cid)) return ok({ valid: false }, 400, req);
             const companyDb = readCompanyData(cid);
             if (role === "supervisor") {
-              const valid = companyDb.caregivers.some((c: any) => c.id === userId && c.role === "supervisor");
+              const valid = companyDb.caregivers.some((c) => c.id === userId && c.role === "supervisor");
               return ok({ valid }, 200, req);
             }
-            const exists = companyDb.caregivers.some((c: any) => c.id === userId);
+            const exists = companyDb.caregivers.some((c) => c.id === userId);
             return ok({ valid: exists }, 200, req);
           }
           const db = readDb();
           if (role === "supervisor") {
-            const validSupervisor = userId === "0e7874c3-a937-4158-a0ab-949991be81b9" || db.caregivers.some((c: any) => c.id === userId && c.role === "supervisor");
+            const validSupervisor = db.caregivers.some((c: any) => c.id === userId && c.role === "supervisor");
             return ok({ valid: validSupervisor }, 200, req);
           }
           const exists = db.caregivers.some((c: any) => c.id === userId);
@@ -513,15 +623,15 @@ Bun.serve({
           if (!isValidUUID(authUser.companyId)) return ok({ valid: false }, 400, req);
           const companyDb = readCompanyData(authUser.companyId);
           if (authUser.role === "supervisor") {
-            const valid = companyDb.caregivers.some((c: any) => c.id === authUser.id && c.role === "supervisor");
+            const valid = companyDb.caregivers.some((c) => c.id === authUser.id && c.role === "supervisor");
             return ok({ valid }, 200, req);
           }
-          const exists = companyDb.caregivers.some((c: any) => c.id === authUser.id);
+          const exists = companyDb.caregivers.some((c) => c.id === authUser.id);
           return ok({ valid: exists }, 200, req);
         }
         const db = readDb();
         if (authUser.role === "supervisor") {
-          const validSupervisor = authUser.id === "0e7874c3-a937-4158-a0ab-949991be81b9" || db.caregivers.some((c: any) => c.id === authUser.id && c.role === "supervisor");
+          const validSupervisor = db.caregivers.some((c: any) => c.id === authUser.id && c.role === "supervisor");
           return ok({ valid: validSupervisor }, 200, req);
         }
         const exists = db.caregivers.some((c: any) => c.id === authUser.id);
@@ -545,11 +655,11 @@ Bun.serve({
         if (companyId && !isValidUUID(companyId)) return ok({ error: "Invalid company ID" }, 400, req);
       }
 
-      function useDb(companyId: string | null) {
+      function useDb(companyId: string | null): CompanyData {
         if (companyId) return readCompanyData(companyId);
         return readDb();
       }
-      function saveDb(companyId: string | null, data: any) {
+      function saveDb(companyId: string | null, data: CompanyData) {
         if (companyId) writeCompanyData(companyId, data);
         else writeDb(data);
       }
@@ -561,6 +671,10 @@ Bun.serve({
           const rlKey = `create_elder:${companyId || "anon"}`;
           if (!checkRateLimit(rlKey, 5, 60_000)) return ok({ error: "Rate limit exceeded" }, 429, req);
           const body = await req.json();
+          if (body.full_name) body.full_name = sanitize(body.full_name);
+          if (body.address) body.address = sanitize(body.address);
+          if (body.phone) body.phone = sanitize(body.phone);
+          if (body.notes) body.notes = sanitize(body.notes);
           await resolveLocation(body);
           companyDb.elders.push(body);
           saveDb(companyId, companyDb);
@@ -568,8 +682,12 @@ Bun.serve({
         }
         if (method === "PUT") {
           const body = await req.json();
+          if (body.full_name) body.full_name = sanitize(body.full_name);
+          if (body.address) body.address = sanitize(body.address);
+          if (body.phone) body.phone = sanitize(body.phone);
+          if (body.notes) body.notes = sanitize(body.notes);
           await resolveLocation(body);
-          const idx = companyDb.elders.findIndex((e: any) => e.id === body.id);
+          const idx = companyDb.elders.findIndex((e) => e.id === body.id);
           if (idx !== -1) {
             companyDb.elders[idx] = { ...companyDb.elders[idx], ...body };
             saveDb(companyId, companyDb);
@@ -580,7 +698,7 @@ Bun.serve({
         if (method === "DELETE") {
           const id = url.searchParams.get("id");
           if (id) {
-            companyDb.elders = companyDb.elders.filter((e: any) => e.id !== id);
+            companyDb.elders = companyDb.elders.filter((e) => e.id !== id);
             saveDb(companyId, companyDb);
           }
           return ok({ ok: true }, 200, req);
@@ -594,6 +712,9 @@ Bun.serve({
           const rlKey = `create_caregiver:${companyId || "anon"}`;
           if (!checkRateLimit(rlKey, 5, 60_000)) return ok({ error: "Rate limit exceeded" }, 429, req);
           const body = await req.json();
+          if (body.full_name) body.full_name = sanitize(body.full_name);
+          if (body.phone) body.phone = sanitize(body.phone);
+          if (body.address) body.address = sanitize(body.address);
           if (body.password) {
             body.password_hash = hashPassword(body.password);
             delete body.password;
@@ -605,8 +726,11 @@ Bun.serve({
         }
         if (method === "PUT") {
           const body = await req.json();
-          const idx = companyDb.caregivers.findIndex((c: any) => c.id === body.id);
+          const idx = companyDb.caregivers.findIndex((c) => c.id === body.id);
           if (idx !== -1) {
+            if (body.full_name) body.full_name = sanitize(body.full_name);
+            if (body.phone) body.phone = sanitize(body.phone);
+            if (body.address) body.address = sanitize(body.address);
             if (body.password) {
               body.password_hash = hashPassword(body.password);
               delete body.password;
@@ -623,8 +747,8 @@ Bun.serve({
         if (method === "DELETE") {
           const id = url.searchParams.get("id");
           if (id) {
-            companyDb.caregivers = companyDb.caregivers.filter((c: any) => c.id !== id);
-            companyDb.assignments = companyDb.assignments.filter((a: any) => a.caregiver_id !== id);
+            companyDb.caregivers = companyDb.caregivers.filter((c) => c.id !== id);
+            companyDb.assignments = companyDb.assignments.filter((a) => a.caregiver_id !== id);
             saveDb(companyId, companyDb);
           }
           return ok({ ok: true }, 200, req);
@@ -637,7 +761,7 @@ Bun.serve({
         if (method === "POST") {
           const body = await req.json();
           const exists = companyDb.assignments.some(
-            (a: any) => a.caregiver_id === body.caregiver_id && a.elder_id === body.elder_id,
+            (a) => a.caregiver_id === body.caregiver_id && a.elder_id === body.elder_id,
           );
           if (exists) return ok({ error: "Vinculo ja existe" }, 409, req);
           companyDb.assignments.push(body);
@@ -647,7 +771,7 @@ Bun.serve({
         if (method === "DELETE") {
           const id = url.searchParams.get("id");
           if (id) {
-            companyDb.assignments = companyDb.assignments.filter((a: any) => a.id !== id);
+            companyDb.assignments = companyDb.assignments.filter((a) => a.id !== id);
             saveDb(companyId, companyDb);
           }
           return ok({ ok: true }, 200, req);
@@ -673,8 +797,8 @@ Bun.serve({
           const caregiverId = url.searchParams.get("caregiver_id");
           const date = url.searchParams.get("date");
           let list = companyDb.attendance;
-          if (caregiverId) list = list.filter((a: any) => a.caregiver_id === caregiverId);
-          if (date) list = list.filter((a: any) => a.created_at.startsWith(date));
+          if (caregiverId) list = list.filter((a) => a.caregiver_id === caregiverId);
+          if (date) list = list.filter((a) => a.created_at && a.created_at.startsWith(date));
           return ok(list, 200, req);
         }
         if (method === "POST") {
@@ -687,7 +811,7 @@ Bun.serve({
         }
         if (method === "PUT") {
           const body = await req.json();
-          const idx = companyDb.attendance.findIndex((a: any) => a.id === body.id);
+          const idx = companyDb.attendance.findIndex((a) => a.id === body.id);
           if (idx !== -1) {
             companyDb.attendance[idx] = { ...companyDb.attendance[idx], ...body };
             saveDb(companyId, companyDb);
@@ -698,7 +822,7 @@ Bun.serve({
         if (method === "DELETE") {
           const id = url.searchParams.get("id");
           if (id) {
-            companyDb.attendance = companyDb.attendance.filter((a: any) => a.id !== id);
+            companyDb.attendance = companyDb.attendance.filter((a) => a.id !== id);
             saveDb(companyId, companyDb);
           }
           return ok({ ok: true }, 200, req);
@@ -844,12 +968,12 @@ Bun.serve({
         if (event.type === "customer.subscription.deleted") {
           const sub = event.data.object;
           const companiesData = readCompaniesData();
-          const company = companiesData.companies.find((c: any) => c.subscription?.stripeSubscriptionId === sub.id);
+          const company = companiesData.companies.find((c) => c.subscription?.stripeSubscriptionId === sub.id);
           if (company) {
             updateCompanySubscription(company.id, {
               plan: "trial",
               status: "expired",
-              currentPeriodEnd: null,
+              currentPeriodEnd: undefined,
             });
           }
         }
@@ -888,13 +1012,12 @@ Bun.serve({
         const deleteCompanyId = parts[4];
         if (!deleteCompanyId || !isValidUUID(deleteCompanyId)) return ok({ error: "Invalid company ID" }, 400, req);
         const companiesData = readCompaniesData();
-        const idx = companiesData.companies.findIndex((c: any) => c.id === deleteCompanyId);
+        const idx = companiesData.companies.findIndex((c) => c.id === deleteCompanyId);
         if (idx === -1) return ok({ error: "Empresa nao encontrada" }, 404, req);
         companiesData.companies.splice(idx, 1);
         writeFileSync(join(DB_DIR, "companies.json"), JSON.stringify(companiesData, null, 2));
         const companyFile = join(COMPANIES_DIR, `${deleteCompanyId}.json`);
         if (existsSync(companyFile)) {
-          const { unlinkSync } = require("fs");
           unlinkSync(companyFile);
         }
         return ok({ success: true }, 200, req);
@@ -923,7 +1046,7 @@ Bun.serve({
           updateCompanySubscription(targetCompanyId, {
             plan: body.plan || "premium",
             status: body.status || "active",
-            currentPeriodEnd: body.currentPeriodEnd || null,
+            currentPeriodEnd: body.currentPeriodEnd || undefined,
           });
           return ok({ success: true }, 200, req);
         }

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { UserPlus, Camera, Trash2, Pencil, MapPin } from "lucide-react";
+import { UserPlus, Camera, Trash2, Pencil, MapPin, Search } from "lucide-react";
 import { toast } from "sonner";
 import { generateId } from "@/lib/utils";
 import { useRole } from "@/hooks/use-role";
@@ -41,6 +41,7 @@ function EquipePage() {
   const [editAddress, setEditAddress] = useState("");
   const [editNumber, setEditNumber] = useState("");
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
@@ -377,8 +378,22 @@ function EquipePage() {
         )}
       </div>
 
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar cuidador..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {caregivers?.map((cg: any) => (
+        {caregivers?.filter((cg: any) =>
+          !search ||
+          (cg.full_name || "").toLowerCase().includes(search.toLowerCase()) ||
+          (cg.email || "").toLowerCase().includes(search.toLowerCase()),
+        ).map((cg: any) => (
           <Card key={cg.id} className="overflow-hidden transition-shadow hover:shadow-md">
             <CardContent className="flex flex-col items-center gap-3 p-5 text-center">
               {cg.photo_url ? (
@@ -441,6 +456,17 @@ function EquipePage() {
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
             Nenhum cuidador cadastrado ainda.
+          </CardContent>
+        </Card>
+      )}
+      {caregivers && caregivers.length > 0 && caregivers.filter((cg: any) =>
+        !search ||
+        (cg.full_name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (cg.email || "").toLowerCase().includes(search.toLowerCase()),
+      ).length === 0 && (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground">
+            Nenhum cuidador encontrado para "{search}".
           </CardContent>
         </Card>
       )}

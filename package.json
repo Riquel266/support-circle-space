@@ -13,7 +13,8 @@
     "cap:build": "vite build --config vite.config.capacitor.ts",
     "cap:sync": "cap sync android",
     "cap:open": "cap open android",
-    "cap:build:android": "bun run cap:build && bun run cap:sync"
+    "cap:build:android": "bun run cap:build && bun run cap:sync",
+    "dev:server": "JWT_SECRET=cuidarbem-dev-secret-2026 bun run db/server.ts"
   },
   "dependencies": {
     "@capacitor-community/electron": "^5.0.1",
