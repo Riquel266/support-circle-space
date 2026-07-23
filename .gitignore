@@ -10,11 +10,17 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-web
 .output
 .vinxi
 .tanstack/**
 .nitro
 *.local
+
+# Executables
+*.exe
+*.msi
+*.dmg
 
 # Wrangler / Cloudflare
 .wrangler/
