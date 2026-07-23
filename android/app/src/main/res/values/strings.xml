@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CuidarBem</string>
+    <string name="title_activity_main">CuidarBem</string>
+    <string name="package_name">com.cuidarbem.app</string>
+    <string name="custom_url_scheme">com.cuidarbem.app</string>
+</resources>

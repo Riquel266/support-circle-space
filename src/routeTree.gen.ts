@@ -10,13 +10,16 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as SimulateCheckoutRouteImport } from './routes/simulate-checkout'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRegistrarRouteImport } from './routes/_authenticated/registrar'
 import { Route as AuthenticatedPresencaRouteImport } from './routes/_authenticated/presenca'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedEquipeRouteImport } from './routes/_authenticated/equipe'
+import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedIdososIndexRouteImport } from './routes/_authenticated/idosos.index'
 import { Route as AuthenticatedIdososElderIdRouteImport } from './routes/_authenticated/idosos.$elderId'
 
@@ -25,9 +28,19 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SimulateCheckoutRoute = SimulateCheckoutRouteImport.update({
+  id: '/simulate-checkout',
+  path: '/simulate-checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -59,6 +72,11 @@ const AuthenticatedEquipeRoute = AuthenticatedEquipeRouteImport.update({
   path: '/equipe',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedIdososIndexRoute =
   AuthenticatedIdososIndexRouteImport.update({
     id: '/idosos/',
@@ -74,8 +92,11 @@ const AuthenticatedIdososElderIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/simulate-checkout': typeof SimulateCheckoutRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/billing': typeof AuthenticatedBillingRoute
   '/equipe': typeof AuthenticatedEquipeRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/presenca': typeof AuthenticatedPresencaRoute
@@ -85,8 +106,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/simulate-checkout': typeof SimulateCheckoutRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/billing': typeof AuthenticatedBillingRoute
   '/equipe': typeof AuthenticatedEquipeRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/presenca': typeof AuthenticatedPresencaRoute
@@ -98,8 +122,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/simulate-checkout': typeof SimulateCheckoutRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/equipe': typeof AuthenticatedEquipeRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/presenca': typeof AuthenticatedPresencaRoute
@@ -111,8 +138,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/auth'
+    | '/simulate-checkout'
     | '/sitemap.xml'
+    | '/billing'
     | '/equipe'
     | '/painel'
     | '/presenca'
@@ -122,8 +152,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/auth'
+    | '/simulate-checkout'
     | '/sitemap.xml'
+    | '/billing'
     | '/equipe'
     | '/painel'
     | '/presenca'
@@ -134,8 +167,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/admin'
     | '/auth'
+    | '/simulate-checkout'
     | '/sitemap.xml'
+    | '/_authenticated/billing'
     | '/_authenticated/equipe'
     | '/_authenticated/painel'
     | '/_authenticated/presenca'
@@ -147,7 +183,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
+  SimulateCheckoutRoute: typeof SimulateCheckoutRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
 }
 
@@ -160,11 +198,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/simulate-checkout': {
+      id: '/simulate-checkout'
+      path: '/simulate-checkout'
+      fullPath: '/simulate-checkout'
+      preLoaderRoute: typeof SimulateCheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -209,6 +261,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEquipeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/billing': {
+      id: '/_authenticated/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof AuthenticatedBillingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/idosos/': {
       id: '/_authenticated/idosos/'
       path: '/idosos'
@@ -227,6 +286,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
   AuthenticatedEquipeRoute: typeof AuthenticatedEquipeRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedPresencaRoute: typeof AuthenticatedPresencaRoute
@@ -236,6 +296,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedBillingRoute: AuthenticatedBillingRoute,
   AuthenticatedEquipeRoute: AuthenticatedEquipeRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedPresencaRoute: AuthenticatedPresencaRoute,
@@ -250,7 +311,9 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
+  SimulateCheckoutRoute: SimulateCheckoutRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
 }
 export const routeTree = rootRouteImport

@@ -14,8 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-const API_URL = () => `/api`;
+import { API_URL, companyFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/presenca")({
   component: PresencaPage,
@@ -55,7 +54,7 @@ function PresencaPage() {
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       return res.json();
     },
   });
@@ -63,7 +62,7 @@ function PresencaPage() {
   const { data: elders = [] } = useQuery({
     queryKey: ["elders"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/elders`);
+      const res = await companyFetch("/elders");
       return res.json();
     },
   });
@@ -71,14 +70,14 @@ function PresencaPage() {
   const { data: attendance = [] } = useQuery({
     queryKey: ["attendance"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/attendance`);
+      const res = await companyFetch("/attendance");
       return res.json();
     },
   });
 
   const updateRecord = useMutation({
     mutationFn: async ({ id, created_at, departure_time }: { id: string; created_at: string; departure_time: string | null }) => {
-      const res = await fetch(`${API_URL()}/attendance`, {
+      const res = await companyFetch("/attendance", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, created_at, departure_time }),
@@ -95,7 +94,7 @@ function PresencaPage() {
 
   const deleteRecord = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`${API_URL()}/attendance?id=${id}`, {
+      const res = await companyFetch(`/attendance?id=${id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Erro ao excluir");
@@ -116,7 +115,7 @@ function PresencaPage() {
         created_at: new Date().toISOString(),
         departure_time: null,
       };
-      const res = await fetch(`${API_URL()}/attendance`, {
+      const res = await companyFetch("/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
@@ -132,7 +131,7 @@ function PresencaPage() {
 
   const checkOut = useMutation({
     mutationFn: async (recordId: string) => {
-      const res = await fetch(`${API_URL()}/attendance`, {
+      const res = await companyFetch("/attendance", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

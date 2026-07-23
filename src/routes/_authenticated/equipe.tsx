@@ -19,8 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AddressSearch } from "@/components/AddressSearch";
-
-const API_URL = () => `/api`;
+import { API_URL, companyFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/equipe")({
   component: EquipePage,
@@ -37,14 +36,16 @@ function EquipePage() {
   const [isSupervisor, setIsSupervisor] = useState(false);
   const [editIsSupervisor, setEditIsSupervisor] = useState(false);
   const [addAddress, setAddAddress] = useState("");
+  const [addNumber, setAddNumber] = useState("");
   const [addCoords, setAddCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [editAddress, setEditAddress] = useState("");
+  const [editNumber, setEditNumber] = useState("");
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       const data = await res.json();
       return data.sort((a: any, b: any) =>
         (a.full_name || "").localeCompare(b.full_name || ""),
@@ -79,7 +80,7 @@ function EquipePage() {
         location_radius: input.location_radius,
         created_at: new Date().toISOString(),
       };
-      const res = await fetch(`${API_URL()}/caregivers`, {
+      const res = await companyFetch("/caregivers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newCg),
@@ -98,7 +99,7 @@ function EquipePage() {
 
   const deleteCaregiver = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`${API_URL()}/caregivers?id=${id}`, {
+      const res = await companyFetch(`/caregivers?id=${id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Erro ao excluir.");
@@ -125,7 +126,7 @@ function EquipePage() {
       location_lng: number | null;
       location_radius: number;
     }) => {
-      const res = await fetch(`${API_URL()}/caregivers`, {
+      const res = await companyFetch("/caregivers", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -259,7 +260,9 @@ function EquipePage() {
                       value={addAddress}
                       onChange={setAddAddress}
                       onCoordinates={(lat, lng) => setAddCoords({ lat, lng })}
-                      placeholder="Rua, número, bairro, cidade"
+                      placeholder="Rua, bairro, cidade"
+                      number={addNumber}
+                      onNumberChange={setAddNumber}
                     />
                   </div>
                   <div className="space-y-1">
@@ -343,7 +346,9 @@ function EquipePage() {
                         value={editAddress}
                         onChange={setEditAddress}
                         onCoordinates={(lat, lng) => setEditCoords({ lat, lng })}
-                        placeholder="Rua, número, bairro, cidade"
+                        placeholder="Rua, bairro, cidade"
+                        number={editNumber}
+                        onNumberChange={setEditNumber}
                       />
                     </div>
                     <div className="space-y-1">

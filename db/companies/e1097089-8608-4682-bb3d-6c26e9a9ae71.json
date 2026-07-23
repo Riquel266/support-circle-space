@@ -1,0 +1,72 @@
+{
+  "elders": [
+    {
+      "id": "07edcca7-fdc7-4a91-9d55-59440694e68c",
+      "full_name": "Anésio da silva santos",
+      "birth_date": "1947-04-12",
+      "medical_notes": null,
+      "photo_url": null,
+      "location_address": "Avenida Adutora do Rio Claro, Conjunto Habitacional Teotônio Vilela, Sapopemba, São Paulo, Região Sudeste, 03988-000, Brasil",
+      "location_lat": -23.6057508,
+      "location_lng": -46.507789,
+      "location_radius": 500,
+      "active": true,
+      "created_at": "2026-07-23T18:01:22.173Z"
+    }
+  ],
+  "caregivers": [
+    {
+      "id": "59908387-01bd-4233-b864-894e8155ee21",
+      "full_name": "aq",
+      "email": "saquila164@gmail.com",
+      "phone": null,
+      "role": "supervisor",
+      "password_hash": "987e9aac41589de86e720b7c2b93c7ae:7f87aeb015247c453c36f3d9f9bfed55e766e0a0e7a3f34ff811944cfb34ccd9bb1ae42159540176ad4245ee45efe111d91770b8ef766beec9aba707a8d88e4c",
+      "photo_url": null,
+      "created_at": "2026-07-23T17:56:41.545Z",
+      "location_address": "Avenida Adutora do Rio Claro, Conjunto Habitacional Teotônio Vilela, Sapopemba, São Paulo, Região Sudeste, 03988-000, Brasil",
+      "location_lat": -23.6057508,
+      "location_lng": -46.507789,
+      "location_radius": 300
+    },
+    {
+      "id": "6e9ce144-b0ed-4f5f-bc93-e95e688994cb",
+      "full_name": "Riquelme barbosa dos santos",
+      "phone": null,
+      "email": "mibsbs3@gmail.com",
+      "photo_url": null,
+      "role": "cuidador",
+      "location_address": "Avenida Adutora do Rio Claro, Conjunto Habitacional Teotônio Vilela, Sapopemba, São Paulo, Região Sudeste, 03988-000, Brasil",
+      "location_lat": -23.6057508,
+      "location_lng": -46.507789,
+      "location_radius": 500,
+      "created_at": "2026-07-23T18:07:56.671Z",
+      "password_hash": "890de7a0948ee7e56d992da7efcb030b:0024eba69af95e659d92306a348b9088dea49486e5fda70696515d4e514fe1e8c1387f55c72276c3682a5142363ab9fa91e654cc7d9d0618be25ef83a30ac8bb"
+    }
+  ],
+  "assignments": [],
+  "records": [],
+  "attendance": [
+    {
+      "id": "5f5c1ac8-4732-4212-869f-0aa8d3c858b8",
+      "caregiver_id": "6e9ce144-b0ed-4f5f-bc93-e95e688994cb",
+      "elder_id": "07edcca7-fdc7-4a91-9d55-59440694e68c",
+      "created_at": "2026-07-23T18:07:40.956Z",
+      "departure_time": "2026-07-23T18:09:03.256Z"
+    }
+  ],
+  "caregiver_locations": [
+    {
+      "caregiver_id": "59908387-01bd-4233-b864-894e8155ee21",
+      "lat": -23.604047560366624,
+      "lng": -46.5082294523632,
+      "updated_at": "2026-07-23T18:12:03.088Z"
+    },
+    {
+      "caregiver_id": "6e9ce144-b0ed-4f5f-bc93-e95e688994cb",
+      "lat": -23.603584,
+      "lng": -46.508333,
+      "updated_at": "2026-07-23T18:09:22.966Z"
+    }
+  ]
+}

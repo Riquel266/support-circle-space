@@ -1,0 +1,17 @@
+{
+  "name": "CuidarBem - Monitoramento de Cuidados",
+  "short_name": "CuidarBem",
+  "description": "Sistema de monitoramento de cuidados a idosos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

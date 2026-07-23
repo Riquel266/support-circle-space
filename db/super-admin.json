@@ -1,0 +1,10 @@
+{
+  "admins": [
+    {
+      "id": "super-admin-1",
+      "email": "admin@cuidarbem.com",
+      "name": "Super Admin",
+      "password": "1814c5a950aaf05863b00b48d1f31528:284aadf118a6c7d142aef5570602e012858f9929dd7df914bfe15c88ebdb9b0e8311153c77ff084ca489315f0134f32a8a44665e20f32011b44513b4ddeefe80"
+    }
+  ]
+}

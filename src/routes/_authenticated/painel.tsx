@@ -15,8 +15,7 @@ import { Label } from "@/components/ui/label";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { SEVERITY_LABELS, formatDateTime, type Alert, type CareRecord } from "@/lib/care";
-
-const API_URL = () => `/api`;
+import { API_URL, companyFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/painel")({
   component: PainelPage,
@@ -90,7 +89,7 @@ function SupervisorDashboard() {
   const { data: elders } = useQuery({
     queryKey: ["elders"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/elders`);
+      const res = await companyFetch("/elders");
       const data = await res.json();
       return data.sort((a: any, b: any) => a.full_name.localeCompare(b.full_name));
     },
@@ -99,7 +98,7 @@ function SupervisorDashboard() {
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       return res.json();
     },
   });
@@ -107,7 +106,7 @@ function SupervisorDashboard() {
   const { data: assignments } = useQuery({
     queryKey: ["all-assignments"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/assignments`);
+      const res = await companyFetch("/assignments");
       return res.json();
     },
   });
@@ -115,7 +114,7 @@ function SupervisorDashboard() {
   const { data: records } = useQuery({
     queryKey: ["recent-records"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/records`);
+      const res = await companyFetch("/records");
       const data = await res.json();
       return data.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
@@ -124,7 +123,7 @@ function SupervisorDashboard() {
   const { data: alerts } = useQuery({
     queryKey: ["open-alerts"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/records`);
+      const res = await companyFetch("/records");
       const data = await res.json();
       return data.filter((r: any) => r.record_type === "alerta" && !r.resolved);
     },
@@ -195,7 +194,7 @@ function HandoversTab() {
   const { data: records } = useQuery({
     queryKey: ["all-records"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/records`);
+      const res = await companyFetch("/records");
       const data = await res.json();
       return data.filter((r: any) => r.record_type === "passagem_plantao").sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
@@ -204,7 +203,7 @@ function HandoversTab() {
   const { data: elders } = useQuery({
     queryKey: ["elders"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/elders`);
+      const res = await companyFetch("/elders");
       return res.json();
     },
   });
@@ -212,7 +211,7 @@ function HandoversTab() {
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       return res.json();
     },
   });
@@ -504,7 +503,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
   const { data: assignments } = useQuery({
     queryKey: ["my-assignments", userId],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/assignments`);
+      const res = await companyFetch("/assignments");
       const all = await res.json();
       return all.filter((a: any) => a.caregiver_id === userId);
     },
@@ -513,7 +512,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
   const { data: elders } = useQuery({
     queryKey: ["elders"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/elders`);
+      const res = await companyFetch("/elders");
       return res.json();
     },
   });
@@ -521,7 +520,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       return res.json();
     },
   });
@@ -529,7 +528,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
   const { data: records } = useQuery({
     queryKey: ["my-records", userId],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/records`);
+      const res = await companyFetch("/records");
       const all = await res.json();
       return all.filter((r: any) => r.caregiver_id === userId).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
@@ -541,7 +540,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
     queryKey: ["elders-records", assignedElderIds],
     enabled: assignedElderIds.length > 0,
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/records`);
+      const res = await companyFetch("/records");
       const all = await res.json();
       return all
         .filter((r: any) => assignedElderIds.includes(r.elder_id))
@@ -563,7 +562,7 @@ function CaregiverDashboard({ userId }: { userId: string }) {
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Meus cuidados</h1>
         <Button asChild>
-          <Link to="/registrar">
+          <Link to="/registrar" search={{ elderId: undefined }}>
             <ClipboardPlus className="mr-1 h-4 w-4" /> Novo registro
           </Link>
         </Button>
@@ -657,14 +656,14 @@ function LocationTab() {
   const { data: caregivers } = useQuery({
     queryKey: ["caregivers"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       return res.json();
     },
   });
 
   const fetchLocations = async () => {
     try {
-      const res = await fetch(`${API_URL()}/caregiver-locations`);
+      const res = await companyFetch("/caregiver-locations");
       const data = await res.json();
       setLocations(data);
     } catch {

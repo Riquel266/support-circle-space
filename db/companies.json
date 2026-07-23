@@ -1,0 +1,21 @@
+{
+  "companies": [
+    {
+      "id": "e1097089-8608-4682-bb3d-6c26e9a9ae71",
+      "name": "TOPCARE",
+      "slug": "Top-Care",
+      "active": true,
+      "createdAt": "2026-07-23T17:56:41.467Z",
+      "subscription": {
+        "plan": "trial",
+        "status": "active",
+        "trialStartedAt": "2026-07-23T17:56:41.468Z",
+        "trialEndsAt": "2026-08-22T17:56:41.468Z",
+        "paymentGateway": null,
+        "gatewaySubscriptionId": null,
+        "currentPeriodStart": null,
+        "currentPeriodEnd": null
+      }
+    }
+  ]
+}

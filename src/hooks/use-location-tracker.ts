@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
+import { API_URL, companyFetch } from "@/lib/api";
 
-const API_URL = `/api`;
 const INTERVAL_MS = 30000;
 
 export function useLocationTracker(userId: string | null) {
@@ -15,7 +15,7 @@ export function useLocationTracker(userId: string | null) {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             try {
-              await fetch(`${API_URL}/caregiver-locations`, {
+              await companyFetch("/caregiver-locations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

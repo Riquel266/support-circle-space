@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const API_URL = () => `/api`;
+import { API_URL, companyFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/registrar")({
   component: RegistrarPage,
@@ -47,7 +47,7 @@ function RegistrarPage() {
     queryKey: ["active-attendance", userId],
     enabled: !!userId && role === "cuidador",
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/attendance?caregiver_id=${userId}`);
+      const res = await companyFetch(`/attendance?caregiver_id=${userId}`);
       const data = await res.json();
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -62,7 +62,7 @@ function RegistrarPage() {
   const { data: allElders = [] } = useQuery({
     queryKey: ["elders-list"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/elders`);
+      const res = await companyFetch("/elders");
       return res.json();
     },
   });
@@ -71,7 +71,7 @@ function RegistrarPage() {
     queryKey: ["caregivers-list"],
     enabled: role === "supervisor",
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       return res.json();
     },
   });
@@ -90,7 +90,7 @@ function RegistrarPage() {
     enabled: !!role,
     queryFn: async () => {
       if (role === "supervisor") {
-        const res = await fetch(`${API_URL()}/elders`);
+        const res = await companyFetch("/elders");
         const data = await res.json();
         return data
           .filter((e: any) => e.active !== false)
@@ -100,13 +100,13 @@ function RegistrarPage() {
           }));
       }
 
-      const res = await fetch(`${API_URL()}/assignments`);
+      const res = await companyFetch("/assignments");
       const allAssigns = await res.json();
       const myAssigns = allAssigns.filter(
         (a: any) => a.caregiver_id === userId,
       );
 
-      const eldersRes = await fetch(`${API_URL()}/elders`);
+      const eldersRes = await companyFetch("/elders");
       const allElders = await eldersRes.json();
 
       return myAssigns.map((a: any) => {
@@ -288,7 +288,7 @@ function RegistrarPage() {
             created_at: new Date().toISOString(),
           };
 
-          await fetch(`${API_URL()}/records`, {
+          await companyFetch("/records", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(newRecord),
@@ -307,7 +307,7 @@ function RegistrarPage() {
           created_at: new Date().toISOString(),
         };
 
-        await fetch(`${API_URL()}/records`, {
+        await companyFetch("/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(handoverRecord),

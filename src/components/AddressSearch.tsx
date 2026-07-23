@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { MapPin, Loader2 } from "lucide-react";
 
 interface NominatimResult {
@@ -13,19 +14,23 @@ interface AddressSearchProps {
   onChange: (address: string) => void;
   onCoordinates: (lat: number, lng: number) => void;
   placeholder?: string;
+  number?: string;
+  onNumberChange?: (number: string) => void;
 }
 
 export function AddressSearch({
   value,
   onChange,
   onCoordinates,
-  placeholder = "Rua, número, bairro, cidade",
+  placeholder = "Rua, bairro, cidade",
+  number = "",
+  onNumberChange,
 }: AddressSearchProps) {
   const [query, setQuery] = useState(value);
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,24 +80,39 @@ export function AddressSearch({
   };
 
   const handleSelect = (result: NominatimResult) => {
-    setQuery(result.display_name);
-    onChange(result.display_name);
+    const display = result.display_name;
+    setQuery(display);
+    const street = display.split(",")[0];
+    const fullAddress = number ? `${street}, ${number}` : display;
+    onChange(fullAddress);
     onCoordinates(parseFloat(result.lat), parseFloat(result.lon));
     setSuggestions([]);
     setOpen(false);
   };
 
   return (
-    <div ref={containerRef} className="relative">
-      <div className="relative">
-        <Input
-          value={query}
-          onChange={handleInputChange}
-          onFocus={() => suggestions.length > 0 && setOpen(true)}
-          placeholder={placeholder}
-        />
-        {loading && (
-          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+    <div ref={containerRef} className="relative space-y-1.5">
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Input
+            value={query}
+            onChange={handleInputChange}
+            onFocus={() => suggestions.length > 0 && setOpen(true)}
+            placeholder={placeholder}
+          />
+          {loading && (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
+        </div>
+        {onNumberChange && (
+          <div className="w-24">
+            <Input
+              value={number}
+              onChange={(e) => onNumberChange(e.target.value)}
+              placeholder="Nº"
+              inputMode="numeric"
+            />
+          </div>
         )}
       </div>
       {open && suggestions.length > 0 && (

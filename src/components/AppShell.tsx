@@ -1,24 +1,83 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { HeartHandshake, LayoutDashboard, Users, ClipboardPlus, UserCog, LogOut, CalendarCheck } from "lucide-react";
+import { HeartHandshake, LayoutDashboard, Users, ClipboardPlus, UserCog, LogOut, CalendarCheck, Shield, CreditCard, MapPinOff } from "lucide-react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRole } from "@/hooks/use-role";
 import { useLocationTracker } from "@/hooks/use-location-tracker";
+import { OfflineBanner } from "@/components/OfflineBanner";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, userId } = useRole();
+  const { role, userId, companyId } = useRole();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
 
   useLocationTracker(userId);
+
+  useEffect(() => {
+    if (role !== "cuidador") {
+      setLocationGranted(true);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setLocationGranted(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      () => setLocationGranted(true),
+      () => setLocationGranted(false),
+      { timeout: 10000 },
+    );
+  }, [role]);
 
   const handleSignOut = async () => {
     await queryClient.cancelQueries();
     queryClient.clear();
     localStorage.removeItem("cuidarbem_user");
+    localStorage.removeItem("cuidarbem_token");
     navigate({ to: "/auth", replace: true });
   };
+
+  const handleOpenLocationSettings = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setLocationGranted(true);
+          window.location.reload();
+        },
+        () => setLocationGranted(false),
+        { timeout: 10000 },
+      );
+    }
+  };
+
+  if (role === "cuidador" && locationGranted === false) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <MapPinOff className="mx-auto h-12 w-12 text-red-500" />
+            <CardTitle className="font-display text-xl">Localizacao necessaria</CardTitle>
+            <CardDescription>
+              O CuidarBem precisa da sua localizacao para funcionar. Ative o GPS e permita o acesso a localizacao neste dispositivo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button className="w-full" onClick={handleOpenLocationSettings}>
+              Permitir Localizacao
+            </Button>
+            <Button variant="outline" className="w-full" onClick={handleSignOut}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Sair
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const navItems = [
     ...(role === "supervisor" ? [
@@ -34,6 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <OfflineBanner />
       <header className="sticky top-0 z-40 border-b bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <Link to={role === "supervisor" ? "/painel" : "/idosos"} className="flex items-center gap-2 font-bold text-primary">
@@ -52,6 +112,24 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               ))}
             </nav>
+            {role === "super_admin" && (
+              <Link
+                to="/admin"
+                className="hidden items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-secondary-foreground sm:flex"
+              >
+                <Shield className="h-4 w-4" />
+                Admin
+              </Link>
+            )}
+            {role === "supervisor" && (
+              <Link
+                to="/billing"
+                className="hidden items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-secondary-foreground sm:flex"
+              >
+                <CreditCard className="h-4 w-4" />
+                Planos
+              </Link>
+            )}
             <Button variant="ghost" size="sm" onClick={handleSignOut} aria-label="Sair">
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Sair</span>

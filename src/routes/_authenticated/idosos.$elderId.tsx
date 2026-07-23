@@ -17,8 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { calcAge } from "@/lib/care";
 import { getCurrentPosition, isWithinRadius, haversineDistance } from "@/lib/geo";
-
-const API_URL = () => `/api`;
+import { API_URL, companyFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/idosos/$elderId")({
   component: ElderDetailPage,
@@ -43,7 +42,7 @@ function CuidadorElderView() {
   const { data: elder, isLoading } = useQuery({
     queryKey: ["elder", elderId],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/elders`);
+      const res = await companyFetch("/elders");
       const data = await res.json();
       return data.find((e: any) => e.id === elderId) || null;
     },
@@ -52,7 +51,7 @@ function CuidadorElderView() {
   const { data: attendance = [] } = useQuery({
     queryKey: ["my-attendance", userId],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/attendance?caregiver_id=${userId}`);
+      const res = await companyFetch(`/attendance?caregiver_id=${userId}`);
       return res.json();
     },
   });
@@ -120,7 +119,7 @@ function CuidadorElderView() {
         created_at: new Date().toISOString(),
         departure_time: null,
       };
-      const res = await fetch(`${API_URL()}/attendance`, {
+      const res = await companyFetch("/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
@@ -138,7 +137,7 @@ function CuidadorElderView() {
   const checkOut = useMutation({
     mutationFn: async () => {
       if (!activeRecordForThisElder) return;
-      const res = await fetch(`${API_URL()}/attendance`, {
+      const res = await companyFetch("/attendance", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -302,11 +301,13 @@ function SupervisorElderView() {
   const { userId, userName } = useRole();
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [caregiverFilter, setCaregiverFilter] = useState<string>("");
 
   const { data: elder, isLoading } = useQuery({
     queryKey: ["elder", elderId],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/elders`);
+      const res = await companyFetch("/elders");
       const data = await res.json();
       return data.find((e: any) => e.id === elderId) || null;
     },
@@ -316,7 +317,7 @@ function SupervisorElderView() {
     queryKey: ["records", elderId],
     enabled: !!elderId,
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/records`);
+      const res = await companyFetch("/records");
       const all = await res.json();
       return all.filter((r: any) => r.elder_id === elderId);
     },
@@ -325,7 +326,7 @@ function SupervisorElderView() {
   const { data: caregivers = [] } = useQuery({
     queryKey: ["caregivers"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL()}/caregivers`);
+      const res = await companyFetch("/caregivers");
       return res.json();
     },
   });
@@ -345,12 +346,16 @@ function SupervisorElderView() {
     return true;
   };
 
-  const filteredRecords = useMemo(
-    () => (records ?? []).filter((r) => inRange(r.created_at)),
-    [records, fromDate, toDate],
-  );
+  const filteredRecords = useMemo(() => {
+    return (records ?? []).filter((r: any) => {
+      if (!inRange(r.created_at)) return false;
+      if (typeFilter.length > 0 && !typeFilter.includes(r.record_type)) return false;
+      if (caregiverFilter && r.caregiver_id !== caregiverFilter) return false;
+      return true;
+    });
+  }, [records, fromDate, toDate, typeFilter, caregiverFilter]);
   const filteredAlerts = useMemo(
-    () => (alerts ?? []).filter((a) => inRange(a.created_at)),
+    () => (alerts ?? []).filter((a: any) => inRange(a.created_at)),
     [alerts, fromDate, toDate],
   );
 
@@ -481,6 +486,7 @@ function SupervisorElderView() {
       {isLoading ? (
         <Skeleton className="h-28 w-full" />
       ) : elder ? (
+        <>
         <Card className="mb-6">
           <CardContent className="flex flex-wrap items-center gap-4 p-5">
             {elder.photo_url ? (
@@ -559,6 +565,79 @@ function SupervisorElderView() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className="mb-4">
+          <CardContent className="space-y-4 p-4">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: "Hoje", from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
+                { label: "Últimos 7 dias", from: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10), to: "" },
+                { label: "Último mês", from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10), to: "" },
+              ].map((preset) => (
+                <Button
+                  key={preset.label}
+                  variant={fromDate === preset.from && toDate === preset.to ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setFromDate(preset.from); setToDate(preset.to); }}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+              {(fromDate || toDate) && (
+                <Button variant="ghost" size="sm" onClick={() => { setFromDate(""); setToDate(""); }}>
+                  Limpar datas
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(RECORD_TYPE_LABELS).map(([type, label]) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    typeFilter.includes(type)
+                      ? "bg-primary text-primary-foreground"
+                      : "border bg-background text-muted-foreground hover:bg-secondary"
+                  }`}
+                  onClick={() =>
+                    setTypeFilter((prev) =>
+                      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+                    )
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+              {typeFilter.length > 0 && (
+                <button
+                  type="button"
+                  className="rounded-full px-3 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10"
+                  onClick={() => setTypeFilter([])}
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+
+            {caregivers.length > 1 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Filtrar por cuidador</Label>
+                <select
+                  value={caregiverFilter}
+                  onChange={(e) => setCaregiverFilter(e.target.value)}
+                  className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                >
+                  <option value="">Todos os cuidadores</option>
+                  {caregivers.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.full_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        </>
       ) : (
         <Card className="mb-6">
           <CardContent className="p-6 text-center text-muted-foreground">
@@ -616,9 +695,17 @@ function SupervisorElderView() {
       )}
 
       <section>
-        <h2 className="mb-3 font-display text-lg font-bold">
-          Histórico de cuidados
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-lg font-bold">
+            Histórico de cuidados
+          </h2>
+          <span className="text-sm text-muted-foreground">
+            {filteredRecords.length} registro{filteredRecords.length !== 1 ? "s" : ""}
+            {(typeFilter.length > 0 || caregiverFilter || fromDate || toDate) && (
+              <span className="ml-1">de {records.length}</span>
+            )}
+          </span>
+        </div>
         <div className="space-y-3">
           {filteredRecords.map((r: any) => (
             <div key={r.id}>
